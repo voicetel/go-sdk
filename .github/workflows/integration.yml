@@ -1,0 +1,21 @@
+name: integration
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # weekly Monday 06:00 UTC — within the 6/hr/IP budget
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Integration tests (read-only)
+        env:
+          VOICETEL_USERNAME: ${{ secrets.VOICETEL_USERNAME }}
+          VOICETEL_PASSWORD: ${{ secrets.VOICETEL_PASSWORD }}
+        run: |
+          go test -tags=integration ./... -v -run Integration
