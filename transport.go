@@ -120,7 +120,7 @@ func (t *transport) request(
 // decode parses the response: drains 2xx into out (when supplied),
 // or converts the body into an APIError.
 func decode(resp *http.Response, out any) error {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return &APIError{StatusCode: resp.StatusCode, Message: "read response body", cause: err}

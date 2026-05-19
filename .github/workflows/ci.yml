@@ -26,6 +26,11 @@ jobs:
           if [ -n "$out" ]; then
             echo "These files need gofmt:"; echo "$out"; exit 1
           fi
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=3m
       - name: Test
         run: go test ./... -race -coverprofile=coverage.out
       - name: Coverage summary
