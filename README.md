@@ -273,7 +273,7 @@ Contributions welcome. Open an issue describing the change, or send a pull reque
 
 | Sponsor | Contribution |
 |---------|--------------|
-| [VoiceTel Communications](https://www.voicetel.com) | Primary development and production hosting |
+| [VoiceTel Communications](https://voicetel.com) | Primary development and production hosting |
 
 ## 📄 License
 
