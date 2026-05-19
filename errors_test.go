@@ -147,7 +147,7 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	if err := c.Numbers.RemoveFax(ctx, "2015550123"); err == nil {
 		t.Error("Numbers.RemoveFax expected error")
 	}
-	_, err = c.Numbers.SetForward(ctx, "2015550123", NumberForwardRequest{Destination: 2125550123})
+	_, err = c.Numbers.SetForward(ctx, "2015550123", NumberForwardRequest{Destination: "2125550123"})
 	assertErr(t, "Numbers.SetForward", err)
 	if err := c.Numbers.RemoveForward(ctx, "2015550123"); err == nil {
 		t.Error("Numbers.RemoveForward expected error")

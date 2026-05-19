@@ -328,7 +328,7 @@ func TestNumbersFullSurface(t *testing.T) {
 	if err := c.Numbers.RemoveFax(ctx, "2015550123"); err != nil {
 		t.Fatalf("RemoveFax: %v", err)
 	}
-	if r, err := c.Numbers.SetForward(ctx, "2015550123", NumberForwardRequest{Destination: 2125550123}); err != nil || r.ForwardTo == nil || *r.ForwardTo != "2125550123" {
+	if r, err := c.Numbers.SetForward(ctx, "2015550123", NumberForwardRequest{Destination: "2125550123"}); err != nil || r.ForwardTo == nil || *r.ForwardTo != "2125550123" {
 		t.Fatalf("SetForward: %v", err)
 	}
 	if err := c.Numbers.RemoveForward(ctx, "2015550123"); err != nil {
