@@ -37,7 +37,7 @@ type NumberFaxRequest struct {
 
 // NumberForwardRequest is the body for PUT /v2.2/numbers/{number}/forward.
 type NumberForwardRequest struct {
-	Destination int `json:"destination"` // 10-digit destination number
+	Destination string `json:"destination"` // 10-digit destination number
 }
 
 // NumberTranslationRequest is the body for PUT /v2.2/numbers/{number}/translation.
