@@ -9,7 +9,7 @@ package voicetel
 const SDKVersion = "0.1.0"
 
 // APIVersion is the VoiceTel REST API version this SDK targets.
-const APIVersion = "v2.2.8"
+const APIVersion = "v2.2.10"
 
 // DefaultBaseURL is the production VoiceTel API endpoint.
 const DefaultBaseURL = "https://api.voicetel.com"

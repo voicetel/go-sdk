@@ -183,10 +183,12 @@ type PortSubmitData struct {
 
 // PortAvailabilityData is the response data for GET /v2.2/ports/availability/{number}.
 type PortAvailabilityData struct {
-	Number        string  `json:"number"`
-	Portable      bool    `json:"portable"`
-	LosingCarrier *string `json:"losingCarrier"` // SPID/OCN; nullable
-	Reason        *string `json:"reason"`        // nullable when portable
+	Number             string  `json:"number"`
+	Portable           bool    `json:"portable"`
+	LosingCarrier      *string `json:"losingCarrier"`      // service-provider name; nullable
+	LocalRoutingNumber *string `json:"localRoutingNumber"` // LRN of destination switch (v2.2.10+); nullable
+	RateCenterTier     *string `json:"rateCenterTier"`     // rate-center tier classification (v2.2.10+); nullable
+	Reason             *string `json:"reason"`             // nullable when portable
 }
 
 // InventoryQuery are the query filters for SearchInventory.

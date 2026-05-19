@@ -412,7 +412,7 @@ func TestINumberingFullSurface(t *testing.T) {
 		"GET /v2.2/ports":                         ok(`{"ports":[{"id":"abc","status":"Complete"}]}`),
 		"GET /v2.2/ports/42":                      ok(`{"port":{"id":"abc","status":"Complete"}}`),
 		"POST /v2.2/ports":                        created(`{"pid":"a3a2a","ticket":2114,"message":"ok","loaUrl":"https://x/loa","portUrl":"https://x/port"}`),
-		"GET /v2.2/ports/availability/2015550102": ok(`{"number":"2015550102","portable":true,"losingCarrier":"ACME","reason":null}`),
+		"GET /v2.2/ports/availability/2015550102": ok(`{"number":"2015550102","portable":true,"losingCarrier":"Sinch Voice-NSR-10X-Port/1","localRoutingNumber":"6465550105","rateCenterTier":"0","reason":null}`),
 	})
 
 	if r, err := c.INumbering.SearchInventory(ctx, InventoryQuery{State: "NJ", Limit: 10, NPA: 201, NXX: 555, RateCenter: "CLOSTER", Contains: "55", EndsWith: "00"}); err != nil || r.Numbers[0].Number != "2015550103" {
@@ -440,6 +440,9 @@ func TestINumberingFullSurface(t *testing.T) {
 	}
 	if r, err := c.INumbering.PortAvailability(ctx, "2015550102"); err != nil || !r.Portable {
 		t.Fatalf("PortAvailability: %v", err)
+	} else if r.LocalRoutingNumber == nil || *r.LocalRoutingNumber != "6465550105" || r.RateCenterTier == nil || *r.RateCenterTier != "0" {
+		// v2.2.10 added LocalRoutingNumber and RateCenterTier
+		t.Errorf("PortAvailability v2.2.10 fields not decoded: %+v", r)
 	}
 }
 
