@@ -1,4 +1,4 @@
-# golangci-lint configuration. Run locally with:
+# golangci-lint v2 configuration. Run locally with:
 #
 #   golangci-lint run ./...
 
