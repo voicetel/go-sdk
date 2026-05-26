@@ -2,6 +2,7 @@ package voicetel
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"strings"
 	"time"
@@ -83,7 +84,12 @@ func NewClient(opts ...Option) *Client {
 		o(&cfg)
 	}
 	if cfg.httpClient == nil {
-		cfg.httpClient = &http.Client{Timeout: 30 * time.Second}
+		tp := http.DefaultTransport.(*http.Transport).Clone()
+		if tp.TLSClientConfig == nil {
+			tp.TLSClientConfig = &tls.Config{}
+		}
+		tp.TLSClientConfig.ClientSessionCache = tls.NewLRUClientSessionCache(64)
+		cfg.httpClient = &http.Client{Timeout: 30 * time.Second, Transport: tp}
 	}
 	t := &transport{
 		baseURL:    strings.TrimRight(cfg.baseURL, "/"),
