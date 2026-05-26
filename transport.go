@@ -3,6 +3,8 @@ package voicetel
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -67,6 +69,13 @@ func (t *transport) request(
 		}
 	}
 
+	var idempotencyKey string
+	if method == "POST" || method == "PUT" || method == "PATCH" {
+		b := make([]byte, 16)
+		_, _ = rand.Read(b)
+		idempotencyKey = hex.EncodeToString(b)
+	}
+
 	var lastErr error
 	for attempt := 0; attempt <= t.maxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(bodyBytes))
@@ -80,6 +89,9 @@ func (t *transport) request(
 		}
 		if requireAuth {
 			req.Header.Set("Authorization", "Bearer "+t.apiKey)
+		}
+		if idempotencyKey != "" {
+			req.Header.Set("Idempotency-Key", idempotencyKey)
 		}
 
 		resp, err := t.httpClient.Do(req)
