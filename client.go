@@ -86,7 +86,9 @@ func NewClient(opts ...Option) *Client {
 	if cfg.httpClient == nil {
 		tp := http.DefaultTransport.(*http.Transport).Clone()
 		if tp.TLSClientConfig == nil {
-			tp.TLSClientConfig = &tls.Config{}
+			tp.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		} else if tp.TLSClientConfig.MinVersion == 0 {
+			tp.TLSClientConfig.MinVersion = tls.VersionTLS12
 		}
 		tp.TLSClientConfig.ClientSessionCache = tls.NewLRUClientSessionCache(64)
 		cfg.httpClient = &http.Client{Timeout: 30 * time.Second, Transport: tp}
