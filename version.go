@@ -6,7 +6,7 @@
 package voicetel
 
 // SDKVersion is this client library's semantic version.
-const SDKVersion = "0.1.0"
+const SDKVersion = "2.2.10"
 
 // APIVersion is the VoiceTel REST API version this SDK targets.
 const APIVersion = "v2.2.10"
