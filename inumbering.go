@@ -116,13 +116,12 @@ type InventoryCoverageItem struct {
 
 // PortSummary is one row in the port-status list.
 type PortSummary struct {
-	Status     string `json:"status"`
-	ID         string `json:"id,omitempty"`
-	PID        string `json:"pid,omitempty"`
-	FOC        string `json:"foc,omitempty"` // Firm Order Commitment (YYYYMMDD)
-	CreatedAt  string `json:"createdAt,omitempty"`
-	Message    string `json:"message,omitempty"`
-	SupportURL string `json:"supportUrl,omitempty"`
+	Status    string `json:"status"`
+	ID        string `json:"id,omitempty"`
+	PID       string `json:"pid,omitempty"`
+	FOC       string `json:"foc,omitempty"` // Firm Order Commitment (YYYYMMDD)
+	CreatedAt string `json:"createdAt,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 // PortDetail is the full record for a single port-in.
@@ -157,7 +156,7 @@ type OrderFailedEntry struct {
 // OrderCreateData is the response data for POST /v2.2/orders.
 type OrderCreateData struct {
 	OrderID        string             `json:"orderId"`
-	AmountCharged  float64            `json:"amountCharged"`
+	AmountCharged  float64            `json:"amountCharged"` // amount deducted from the account balance
 	NumbersOrdered []string           `json:"numbersOrdered"`
 	Failed         []OrderFailedEntry `json:"failed,omitempty"`
 }
@@ -257,7 +256,8 @@ func (s *INumberingService) Coverage(ctx context.Context, q CoverageQuery) (*Inv
 	return &out, nil
 }
 
-// Order purchases new TNs.
+// Order purchases new TNs, charging the account balance the per-DID monthly
+// rate for each number ordered. Insufficient balance returns 402.
 func (s *INumberingService) Order(ctx context.Context, body OrderCreateRequest) (*OrderCreateData, error) {
 	var out OrderCreateData
 	if err := s.c.t.request(ctx, "POST", "/v2.2/orders", nil, body, &out, true); err != nil {
@@ -284,7 +284,8 @@ func (s *INumberingService) Port(ctx context.Context, id int) (*PortDetailData, 
 	return &out, nil
 }
 
-// SubmitPort submits a port-in order.
+// SubmitPort submits a port-in order, deducting the configured per-TN port
+// fee from the account balance. Insufficient balance returns 402.
 func (s *INumberingService) SubmitPort(ctx context.Context, body PortSubmitRequest) (*PortSubmitData, error) {
 	var out PortSubmitData
 	if err := s.c.t.request(ctx, "POST", "/v2.2/ports", nil, body, &out, true); err != nil {

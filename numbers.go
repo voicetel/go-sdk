@@ -53,7 +53,10 @@ type NumberSmsRequest struct {
 
 // NumberMessagingPatchRequest is the body for PATCH /v2.2/numbers/{number}/messaging.
 //
-// At least one of RouteIn or RouteOut must be set.
+// At least one of RouteIn or RouteOut must be set. RouteIn must be a
+// numbers_sms row id owned by the authenticated account, or 0 to detach.
+// RouteOut must be 0 (outbound off) or the route the number is enabled on;
+// to move a number to another campaign or messaging path use AssignCampaign.
 type NumberMessagingPatchRequest struct {
 	RouteIn  *int `json:"routeIn,omitempty"`  // numbers_sms row id; 0 to detach
 	RouteOut *int `json:"routeOut,omitempty"` // outbound carrier id
@@ -105,16 +108,28 @@ type CampaignBinding struct {
 	UpstreamCnpID string `json:"upstreamCnpId"`
 }
 
+// MessagingEnablementJob is the state of an asynchronous (path C) enablement,
+// returned by AssignCampaign (status "pending") and while in progress as
+// NumberMessagingState.Pending.
+type MessagingEnablementJob struct {
+	CampaignID string `json:"campaignId"`
+	State      string `json:"state"`     // queued, hosting, assigning, routing, done, or failed
+	Message    string `json:"message"`   // latest progress note, or the reason for failure
+	CreatedAt  string `json:"createdAt"` // date-time
+	UpdatedAt  string `json:"updatedAt"` // date-time
+}
+
 // NumberMessagingState is the messaging-routing state for one number.
 type NumberMessagingState struct {
-	Number    string           `json:"number"`
-	OnAccount *bool            `json:"onAccount,omitempty"`
-	Enabled   bool             `json:"enabled"`
-	Carrier   int              `json:"carrier"`
-	RouteIn   int              `json:"routeIn"`
-	Resource  string           `json:"resource"`
-	Network   *string          `json:"network"` // "A", "B", or null
-	Campaign  *CampaignBinding `json:"campaign"`
+	Number    string                  `json:"number"`
+	OnAccount *bool                   `json:"onAccount,omitempty"`
+	Enabled   bool                    `json:"enabled"`
+	Carrier   int                     `json:"carrier"`
+	RouteIn   int                     `json:"routeIn"`
+	Resource  string                  `json:"resource"`
+	Network   *string                 `json:"network"` // "A", "B", "C", or null
+	Campaign  *CampaignBinding        `json:"campaign"`
+	Pending   *MessagingEnablementJob `json:"pending,omitempty"` // async path-C enablement in progress
 }
 
 // NumberAddData is the response data for POST /v2.2/numbers.
@@ -184,14 +199,26 @@ type NumberTranslationData struct {
 
 // NumberMessagingCampaignAssignData is the response data for
 // PUT /v2.2/numbers/{number}/messaging-campaign.
+//
+// The campaign must be available to the account and ACTIVE; the number is
+// enabled on the messaging path the campaign lives on — path B synchronously
+// (200, Status "enabled"), path C asynchronously (202, Status "pending":
+// poll GetMessaging until Pending.State is done or failed). Idempotent: a
+// number already bound to the campaign reports Status "already".
 type NumberMessagingCampaignAssignData struct {
-	Number                 string  `json:"number"`
-	CampaignID             string  `json:"campaignId"`
-	Carrier                int     `json:"carrier"`                // 17 = path A, 19 = path B
-	Network                *string `json:"network"`                // "A", "B", or null
-	UpstreamCnpID          *string `json:"upstreamCnpId"`          // CAMP004 = path A, CAMP003 = path B
-	PreviousNetwork        *string `json:"previousNetwork"`        // "A", "B", "unknown", or null
-	PreviousNetworkCleared bool    `json:"previousNetworkCleared"` // true if a prior binding was disabled
+	Number                 string                  `json:"number"`
+	CampaignID             string                  `json:"campaignId"`
+	Status                 string                  `json:"status"`                 // "enabled", "already", or "pending"
+	Carrier                int                     `json:"carrier"`                // 19 = path B, 1 = path C
+	Network                *string                 `json:"network"`                // "B", "C", or null
+	UpstreamCnpID          *string                 `json:"upstreamCnpId"`          // CAMP003 = path B, BANDW = path C
+	PreviousNetwork        *string                 `json:"previousNetwork"`        // "A", "B", or null
+	PreviousNetworkCleared bool                    `json:"previousNetworkCleared"` // true if a prior binding was disabled
+	AlreadyAssigned        bool                    `json:"alreadyAssigned"`        // true when already bound to this campaign
+	OrderID                any                     `json:"orderId"`                // network order id (path B); null for path C, no-ops
+	Warning                *string                 `json:"warning"`                // non-fatal condition detected, or null
+	Message                *string                 `json:"message"`                // note for a pending enablement, or null
+	Job                    *MessagingEnablementJob `json:"job"`                    // async path-C enablement, or null
 }
 
 // NumberMessagingCampaignUnassignData is the response data for
@@ -233,8 +260,9 @@ type NumbersMessagingListData struct {
 // PortOutPinUpdateData is the response data for
 // PATCH /v2.2/numbers/{number}/port-out-pin.
 type PortOutPinUpdateData struct {
-	Number     string `json:"number"`
-	PortOutPin string `json:"portOutPin"`
+	Number     string `json:"number"`     // ten-digit TN whose PIN is reported
+	PortOutPin string `json:"portOutPin"` // PIN now on file (just set, or the locked existing value)
+	Changed    bool   `json:"changed"`    // true if this call set the PIN; false if one was already locked
 }
 
 // ------------------------------------------------------------------ methods ---
@@ -399,7 +427,11 @@ func (s *NumbersService) PatchMessaging(ctx context.Context, number string, body
 	return &out, nil
 }
 
-// AssignCampaign binds a 10DLC campaign to a TN.
+// AssignCampaign binds a 10DLC campaign to a TN. Path-B campaigns are bound
+// synchronously (Status "enabled"); path-C campaigns are provisioned
+// asynchronously (202, Status "pending" — poll GetMessaging until the job is
+// done or failed). Campaigns still on path A are being migrated and are
+// refused (409).
 func (s *NumbersService) AssignCampaign(ctx context.Context, number string, body NumberCampaignAssignRequest) (*NumberMessagingCampaignAssignData, error) {
 	var out NumberMessagingCampaignAssignData
 	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+number+"/messaging-campaign", nil, body, &out, true); err != nil {
@@ -427,7 +459,10 @@ func (s *NumbersService) BulkUnassignCampaign(ctx context.Context, numbers []str
 	return &out, nil
 }
 
-// SetPortOutPin sets the port-out PIN for a TN.
+// SetPortOutPin sets the port-out PIN a losing carrier must present to
+// release a TN. A PIN is locked for 30 days once set, so the call is
+// idempotent: if the TN already has a PIN it is returned unchanged with
+// Changed=false; a newly set PIN returns Changed=true.
 func (s *NumbersService) SetPortOutPin(ctx context.Context, number string, body PortOutPinUpdateRequest) (*PortOutPinUpdateData, error) {
 	var out PortOutPinUpdateData
 	if err := s.c.t.request(ctx, "PATCH", "/v2.2/numbers/"+number+"/port-out-pin", nil, body, &out, true); err != nil {

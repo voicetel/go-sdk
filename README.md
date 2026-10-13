@@ -2,7 +2,7 @@
 
 The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api/v2.2/) — provision numbers, place orders, validate e911, send messages, and manage your account, all with strongly-typed, context-aware Go.
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-2.2.11-blue)
 ![Go](https://img.shields.io/badge/go-1.22%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
@@ -48,7 +48,7 @@ The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api
 - **iNumbering** — inventory search, coverage queries, number orders, port-in submissions, port-out availability.
 - **Support** — ticket create / read / update / delete, threaded messages, replies.
 - **ACL** — IP allowlist management with structured 409 conflict bodies.
-- **Authentication** — switch between Digest, IP-only, or hybrid modes; rotate passwords.
+- **Authentication** — switch between Digest, Lax (Digest | IP), IP, or Strict (Digest + IP) modes; rotate passwords.
 
 ### 🧪 Battle-Tested
 - **97% statement coverage** with `go test ./... -cover`.

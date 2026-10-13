@@ -281,12 +281,12 @@ func TestNumbersFullSurface(t *testing.T) {
 		"GET /v2.2/numbers/2015550123/sms":                   ok(`{"number":"2015550123","type":"email","resource":"x@y.com"}`),
 		"PUT /v2.2/numbers/2015550123/sms":                   ok(`{"number":"2015550123","type":"email","resource":"x@y.com"}`),
 		"DELETE /v2.2/numbers/2015550123/sms":                noContent,
-		"GET /v2.2/numbers/2015550123/messaging":             ok(`{"number":"2015550123","enabled":true,"carrier":16,"routeIn":0,"resource":"x","network":"A","campaign":null}`),
+		"GET /v2.2/numbers/2015550123/messaging":             ok(`{"number":"2015550123","enabled":true,"carrier":16,"routeIn":0,"resource":"x","network":"B","campaign":null,"pending":null}`),
 		"PATCH /v2.2/numbers/2015550123/messaging":           ok(`{"number":"2015550123","updated":["routeIn"]}`),
-		"PUT /v2.2/numbers/2015550123/messaging-campaign":    ok(`{"number":"2015550123","campaignId":"C1","carrier":17,"network":"A","upstreamCnpId":"CAMP004","previousNetwork":null,"previousNetworkCleared":false}`),
-		"DELETE /v2.2/numbers/2015550123/messaging-campaign": ok(`{"number":"2015550123","campaignId":"C1","network":"A","upstreamCnpId":"CAMP004","unassigned":true}`),
-		"DELETE /v2.2/numbers/messaging-campaign":            ok(`{"campaignId":"C1","network":"A","upstreamCnpId":"CAMP004","unassignedNumbers":["2015550123"],"failed":[]}`),
-		"PATCH /v2.2/numbers/2015550123/port-out-pin":        ok(`{"number":"2015550123","portOutPin":"1234"}`),
+		"PUT /v2.2/numbers/2015550123/messaging-campaign":    ok(`{"number":"2015550123","campaignId":"C1","status":"enabled","carrier":19,"network":"B","upstreamCnpId":"CAMP003","previousNetwork":null,"previousNetworkCleared":false,"alreadyAssigned":false,"orderId":"229544057","warning":null,"message":null,"job":null}`),
+		"DELETE /v2.2/numbers/2015550123/messaging-campaign": ok(`{"number":"2015550123","campaignId":"C1","network":"B","upstreamCnpId":"CAMP003","unassigned":true}`),
+		"DELETE /v2.2/numbers/messaging-campaign":            ok(`{"campaignId":"C1","network":"B","upstreamCnpId":"CAMP003","unassignedNumbers":["2015550123"],"failed":[]}`),
+		"PATCH /v2.2/numbers/2015550123/port-out-pin":        ok(`{"number":"2015550123","portOutPin":"1234","changed":true}`),
 	})
 
 	if r, err := c.Numbers.List(ctx); err != nil || r.Numbers[0].Route != 4 {
@@ -343,14 +343,17 @@ func TestNumbersFullSurface(t *testing.T) {
 	if err := c.Numbers.RemoveSMS(ctx, "2015550123"); err != nil {
 		t.Fatalf("RemoveSMS: %v", err)
 	}
-	if r, err := c.Numbers.GetMessaging(ctx, "2015550123"); err != nil || r.Network == nil || *r.Network != "A" {
+	if r, err := c.Numbers.GetMessaging(ctx, "2015550123"); err != nil || r.Network == nil || *r.Network != "B" {
 		t.Fatalf("GetMessaging: %v", err)
 	}
 	if r, err := c.Numbers.PatchMessaging(ctx, "2015550123", NumberMessagingPatchRequest{RouteIn: Int(1)}); err != nil || r.Updated[0] != "routeIn" {
 		t.Fatalf("PatchMessaging: %v", err)
 	}
-	if r, err := c.Numbers.AssignCampaign(ctx, "2015550123", NumberCampaignAssignRequest{CampaignID: "C1"}); err != nil || r.Carrier != 17 {
+	if r, err := c.Numbers.AssignCampaign(ctx, "2015550123", NumberCampaignAssignRequest{CampaignID: "C1"}); err != nil || r.Carrier != 19 {
 		t.Fatalf("AssignCampaign: %v", err)
+	} else if r.Status != "enabled" || r.OrderID != "229544057" || r.AlreadyAssigned || r.Job != nil {
+		// v2.2.11 added Status, AlreadyAssigned, OrderID, Warning, Message, and Job
+		t.Errorf("AssignCampaign v2.2.11 fields not decoded: %+v", r)
 	}
 	if r, err := c.Numbers.UnassignCampaign(ctx, "2015550123"); err != nil || !r.Unassigned {
 		t.Fatalf("UnassignCampaign: %v", err)
@@ -360,6 +363,47 @@ func TestNumbersFullSurface(t *testing.T) {
 	}
 	if r, err := c.Numbers.SetPortOutPin(ctx, "2015550123", PortOutPinUpdateRequest{PIN: "1234"}); err != nil || r.PortOutPin != "1234" {
 		t.Fatalf("SetPortOutPin: %v", err)
+	} else if !r.Changed {
+		// v2.2.11 added Changed (PIN idempotency)
+		t.Errorf("SetPortOutPin v2.2.11 field not decoded: %+v", r)
+	}
+}
+
+// v2.2.11: campaigns on path C are enabled asynchronously — PUT returns 202
+// with status "pending" and a job, and GET messaging reports Pending while
+// provisioning is in flight.
+func TestAssignCampaignAsyncPathC(t *testing.T) {
+	ctx := context.Background()
+	c, _ := mux(t, map[string]func(*http.Request) (int, string){
+		"PUT /v2.2/numbers/6185550104/messaging-campaign": func(_ *http.Request) (int, string) {
+			return 202, `{"status":"success","data":{"number":"6185550104","campaignId":"CAMP002","status":"pending","carrier":1,"network":"C","upstreamCnpId":"BANDW","previousNetwork":null,"previousNetworkCleared":false,"alreadyAssigned":false,"orderId":null,"warning":null,"message":"Enablement accepted; the number is being provisioned with the messaging provider (typically minutes, sometimes longer).","job":{"campaignId":"CAMP002","state":"hosting","message":"Hosting order submitted","createdAt":"2026-10-13T12:00:00Z","updatedAt":"2026-10-13T12:00:01Z"}}}`
+		},
+		"GET /v2.2/numbers/6185550104/messaging": ok(`{"number":"6185550104","enabled":false,"carrier":16,"routeIn":0,"resource":"x","network":"C","campaign":null,"pending":{"campaignId":"CAMP002","state":"routing","message":"Routing order submitted","createdAt":"2026-10-13T12:00:00Z","updatedAt":"2026-10-13T12:05:00Z"}}`),
+	})
+
+	r, err := c.Numbers.AssignCampaign(ctx, "6185550104", NumberCampaignAssignRequest{CampaignID: "CAMP002"})
+	if err != nil {
+		t.Fatalf("AssignCampaign: %v", err)
+	}
+	if r.Status != "pending" || r.Network == nil || *r.Network != "C" || r.Carrier != 1 || r.OrderID != nil {
+		t.Errorf("pending assign not decoded: %+v", r)
+	}
+	if r.Message == nil || *r.Message == "" {
+		t.Errorf("pending message not decoded: %+v", r)
+	}
+	if r.Job == nil || r.Job.CampaignID != "CAMP002" || r.Job.State != "hosting" || r.Job.Message != "Hosting order submitted" {
+		t.Errorf("job not decoded: %+v", r.Job)
+	}
+
+	ms, err := c.Numbers.GetMessaging(ctx, "6185550104")
+	if err != nil {
+		t.Fatalf("GetMessaging: %v", err)
+	}
+	if ms.Network == nil || *ms.Network != "C" {
+		t.Errorf("messaging state network: %+v", ms)
+	}
+	if ms.Pending == nil || ms.Pending.State != "routing" || ms.Pending.Message != "Routing order submitted" {
+		t.Errorf("pending job not decoded: %+v", ms.Pending)
 	}
 }
 

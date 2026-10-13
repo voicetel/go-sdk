@@ -32,7 +32,6 @@ type AccountServices struct {
 	CNAM        bool `json:"cnam,omitempty"`
 	BypassMedia bool `json:"bypassMedia,omitempty"`
 	Intl        bool `json:"intl,omitempty"`
-	RCID        bool `json:"rcid,omitempty"`
 	MMS         bool `json:"mms,omitempty"`
 	Dialer      bool `json:"dialer,omitempty"`
 	SMS         bool `json:"sms,omitempty"`

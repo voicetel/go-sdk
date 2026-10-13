@@ -7,12 +7,12 @@ type AuthenticationService struct{ c *Client }
 
 // Auth-mode constants for AuthPutRequest.AuthType and AuthGetData.AuthType.
 //
-//	0 = Digest, 1 = IP Auth, 2 = Digest OR IP, 3 = Digest AND IP.
+//	0 = Digest, 1 = Lax (Digest | IP), 2 = IP, 3 = Strict (Digest + IP).
 const (
-	AuthTypeDigest      = 0
-	AuthTypeIPAuth      = 1
-	AuthTypeDigestOrIP  = 2
-	AuthTypeDigestAndIP = 3
+	AuthTypeDigest = 0
+	AuthTypeLax    = 1
+	AuthTypeIP     = 2
+	AuthTypeStrict = 3
 )
 
 // AuthPutRequest is the body for PUT /v2.2/auth. Pointer fields are optional.
