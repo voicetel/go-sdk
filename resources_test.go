@@ -226,9 +226,9 @@ func TestLookupsFullSurface(t *testing.T) {
 func TestMessagingFullSurface(t *testing.T) {
 	ctx := context.Background()
 	c, _ := mux(t, map[string]func(*http.Request) (int, string){
-		"GET /v2.2/messages":             ok(`{"number":"2015550100","type":"sms","fromTs":1,"toTs":2,"messages":[]}`),
-		"POST /v2.2/messages":            created(`{"id":"x","type":"sms","fromNumber":"2015550100","toNumber":"2015550123","parts":1}`),
-		"POST /v2.2/messaging/brands":    created(`{"result":{"statusCode":"200","status":"Success"}}`),
+		"GET /v2.2/messages":          ok(`{"number":"2015550100","type":"sms","fromTs":1,"toTs":2,"messages":[]}`),
+		"POST /v2.2/messages":         created(`{"id":"x","type":"sms","fromNumber":"2015550100","toNumber":"2015550123","parts":1}`),
+		"POST /v2.2/messaging/brands": created(`{"result":{"statusCode":"200","status":"Success"}}`),
 		"GET /v2.2/messaging/campaigns": ok(`{"campaigns":[` +
 			`{"id":"C1","status":"CAMPAIGN_DCA_COMPLETE","numbers":["2015550123"],` +
 			`"dca":{"electionComplete":true,"electedCarriers":["AT&T","T-Mobile"],` +
