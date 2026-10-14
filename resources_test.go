@@ -229,7 +229,12 @@ func TestMessagingFullSurface(t *testing.T) {
 		"GET /v2.2/messages":             ok(`{"number":"2015550100","type":"sms","fromTs":1,"toTs":2,"messages":[]}`),
 		"POST /v2.2/messages":            created(`{"id":"x","type":"sms","fromNumber":"2015550100","toNumber":"2015550123","parts":1}`),
 		"POST /v2.2/messaging/brands":    created(`{"result":{"statusCode":"200","status":"Success"}}`),
-		"GET /v2.2/messaging/campaigns":  ok(`{"campaigns":[{"id":"C1","status":"ACTIVE","numbers":["2015550123"]}]}`),
+		"GET /v2.2/messaging/campaigns": ok(`{"campaigns":[` +
+			`{"id":"C1","status":"CAMPAIGN_DCA_COMPLETE","numbers":["2015550123"],` +
+			`"dca":{"electionComplete":true,"electedCarriers":["AT&T","T-Mobile"],` +
+			`"carriers":[{"carrier":"T-Mobile","status":"ACTIVE","detail":"Campaign approved",` +
+			`"updatedAt":"2026-10-13T09:30:00Z"}]}},` +
+			`{"id":"C2","status":"CAMPAIGN_INVALID_ID","numbers":[],"dca":null}]}`),
 		"POST /v2.2/messaging/campaigns": created(`{"result":{"statusCode":"200","status":"Success"}}`),
 		"GET /v2.2/numbers/messaging":    ok(`{"numbers":[]}`),
 	})
@@ -245,6 +250,9 @@ func TestMessagingFullSurface(t *testing.T) {
 	}
 	if r, err := c.Messaging.CampaignStatus(ctx); err != nil || r.Campaigns[0].ID != "C1" {
 		t.Fatalf("CampaignStatus: %v", err)
+	} else if r.Campaigns[0].Dca == nil || !r.Campaigns[0].Dca.ElectionComplete ||
+		r.Campaigns[0].Dca.Carriers[0].Carrier != "T-Mobile" || r.Campaigns[1].Dca != nil {
+		t.Fatalf("CampaignStatus dca not decoded: %+v", r.Campaigns[0].Dca)
 	}
 	if r, err := c.Messaging.CreateCampaign(ctx, MessagingCampaignCreateRequest{MessagingBrandID: "B", ExternalCampaignID: "C", CampaignDescription: "d"}); err != nil || r.Result.Status != "Success" {
 		t.Fatalf("CreateCampaign: %v", err)

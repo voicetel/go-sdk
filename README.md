@@ -2,7 +2,7 @@
 
 The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api/v2.2/) — provision numbers, place orders, validate e911, send messages, and manage your account, all with strongly-typed, context-aware Go.
 
-![Version](https://img.shields.io/badge/version-2.2.11-blue)
+![Version](https://img.shields.io/badge/version-2.2.14-blue)
 ![Go](https://img.shields.io/badge/go-1.22%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)

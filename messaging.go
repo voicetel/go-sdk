@@ -30,7 +30,8 @@ type MessagingBrandCreateRequest struct {
 
 // MessagingCampaignCreateRequest is the body for POST /v2.2/messaging/campaigns.
 //
-// CampaignClassName and CampaignStartDate are auto-populated if omitted.
+// CampaignClassName (from the campaign registry) and CampaignStartDate (today)
+// are auto-populated if omitted.
 type MessagingCampaignCreateRequest struct {
 	MessagingBrandID    string  `json:"messagingBrandId"`
 	ExternalCampaignID  string  `json:"externalCampaignId"`
@@ -101,11 +102,28 @@ type MessagingCampaignCreateData struct {
 	Result CampaignRegistrationResult `json:"result"`
 }
 
+// CampaignDcaCarrier is one carrier's latest DCA decision in CampaignDca.
+type CampaignDcaCarrier struct {
+	Carrier   string `json:"carrier"`   // carrier name, e.g. "T-Mobile"
+	Status    string `json:"status"`    // ACTIVE, REJECTED, SUSPENDED, UNSUSPENDED or TERMINATED
+	Detail    string `json:"detail"`    // the reviewer's note, as given
+	UpdatedAt string `json:"updatedAt"` // date-time
+}
+
+// CampaignDca is the carrier (DCA) review progress for a campaign.
+// nil for CAMPAIGN_INVALID_ID.
+type CampaignDca struct {
+	ElectionComplete bool                 `json:"electionComplete"` // every carrier has a DCA assigned
+	ElectedCarriers  []string             `json:"electedCarriers"`  // carriers with a DCA so far; null when unavailable
+	Carriers         []CampaignDcaCarrier `json:"carriers"`         // each carrier decision received, latest per carrier
+}
+
 // CampaignStatusItem is a single campaign and its currently-bound numbers.
 type CampaignStatusItem struct {
-	ID      string   `json:"id"`
-	Status  string   `json:"status"` // CSP status: ACTIVE, CAMPAIGN_DCA_COMPLETE, etc.
-	Numbers []string `json:"numbers"`
+	ID      string       `json:"id"`
+	Status  string       `json:"status"` // CAMPAIGN_DCA_COMPLETE, CAMPAIGN_PENDING_DCA, CAMPAIGN_DCA_REJECTED, CAMPAIGN_INVALID_ID, CAMPAIGN_<registry status>, ...
+	Numbers []string     `json:"numbers"`
+	Dca     *CampaignDca `json:"dca,omitempty"` // carrier (DCA) review progress; null for CAMPAIGN_INVALID_ID
 }
 
 // MessagingCampaignStatusData is the response data for GET /v2.2/messaging/campaigns.
