@@ -211,3 +211,76 @@ func (s *MessagingService) NumbersState(ctx context.Context, numbers []string) (
 	}
 	return &out, nil
 }
+
+// Health returns the account-wide messaging health overview — the same view as
+// the portal Messaging tab: summary counts (numbers, messaging on, healthy,
+// needing attention, in progress), campaigns with carrier-review progress,
+// numbers needing attention (each with a plain-language title, detail and the
+// actions that fix it), 14 days of delivery counts, and the alert-email setting.
+// Updated hourly.
+//
+// The API spec defines no response schema for this endpoint, so the decoded JSON
+// object is returned as-is rather than mapped onto a typed struct.
+func (s *MessagingService) Health(ctx context.Context) (map[string]any, error) {
+	var out map[string]any
+	if err := s.c.t.request(ctx, "GET", "/v2.2/messaging/health", nil, nil, &out, true); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HealthAlerts returns the alert-email setting: whether new messaging problems
+// are emailed to the account.
+//
+// The spec defines no response schema, so the decoded JSON object is returned as-is.
+func (s *MessagingService) HealthAlerts(ctx context.Context) (map[string]any, error) {
+	var out map[string]any
+	if err := s.c.t.request(ctx, "GET", "/v2.2/messaging/health/alerts", nil, nil, &out, true); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetHealthAlerts turns alert emails on or off. When enabled, the account is
+// emailed as new messaging problems are found (at most one digest about every
+// 20 hours).
+//
+// The spec defines no response schema, so the decoded JSON object is returned as-is.
+func (s *MessagingService) SetHealthAlerts(ctx context.Context, enabled bool) (map[string]any, error) {
+	var out map[string]any
+	body := map[string]any{"enabled": enabled}
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/messaging/health/alerts", nil, body, &out, true); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HealthCheck performs a live health check of one number: in service, messaging
+// enabled, campaign approved, assigned to the campaign by the messaging provider,
+// delivery failures in the last 24 hours, and enablement in progress. Limited to
+// 30 checks per hour per account.
+//
+// The spec defines no response schema, so the decoded JSON object is returned as-is.
+func (s *MessagingService) HealthCheck(ctx context.Context, number string) (map[string]any, error) {
+	var out map[string]any
+	body := map[string]any{"number": number}
+	if err := s.c.t.request(ctx, "POST", "/v2.2/messaging/health/check", nil, body, &out, true); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HealthSamples returns up to 3 recent outbound messages from the number that
+// carriers blocked as spam (time, masked recipient, text, reason), to help review
+// content.
+//
+// The spec defines no response schema, so the decoded JSON object is returned as-is.
+func (s *MessagingService) HealthSamples(ctx context.Context, number string) (map[string]any, error) {
+	q := url.Values{}
+	q.Set("number", number)
+	var out map[string]any
+	if err := s.c.t.request(ctx, "GET", "/v2.2/messaging/health/samples", q, nil, &out, true); err != nil {
+		return nil, err
+	}
+	return out, nil
+}

@@ -265,6 +265,55 @@ func TestMessagingFullSurface(t *testing.T) {
 	}
 }
 
+func TestMessagingHealthSurface(t *testing.T) {
+	// v2.2.15: messaging-health endpoints. The spec defines no response schema, so
+	// the SDK returns the decoded JSON object as map[string]any; request bodies and
+	// the samples query are still exercised here.
+	ctx := context.Background()
+	c, _ := mux(t, map[string]func(*http.Request) (int, string){
+		"GET /v2.2/messaging/health":        ok(`{"summary":{"numbers":3,"healthy":2}}`),
+		"GET /v2.2/messaging/health/alerts": ok(`{"enabled":true}`),
+		"PUT /v2.2/messaging/health/alerts": func(r *http.Request) (int, string) {
+			var got map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&got)
+			if got["enabled"] != false {
+				t.Errorf("alerts body enabled != false: %v", got)
+			}
+			return 200, `{"status":"success","data":{"enabled":false}}`
+		},
+		"POST /v2.2/messaging/health/check": func(r *http.Request) (int, string) {
+			var got map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&got)
+			if got["number"] != "2125550123" {
+				t.Errorf("check body number missing: %v", got)
+			}
+			return 200, `{"status":"success","data":{"number":"2125550123","inService":true}}`
+		},
+		"GET /v2.2/messaging/health/samples": func(r *http.Request) (int, string) {
+			if r.URL.Query().Get("number") != "2125550123" {
+				t.Errorf("samples query number missing: %v", r.URL.Query())
+			}
+			return 200, `{"status":"success","data":{"samples":[]}}`
+		},
+	})
+
+	if r, err := c.Messaging.Health(ctx); err != nil || r["summary"] == nil {
+		t.Fatalf("Health: %v", err)
+	}
+	if r, err := c.Messaging.HealthAlerts(ctx); err != nil || r["enabled"] != true {
+		t.Fatalf("HealthAlerts: %v", err)
+	}
+	if r, err := c.Messaging.SetHealthAlerts(ctx, false); err != nil || r["enabled"] != false {
+		t.Fatalf("SetHealthAlerts: %v", err)
+	}
+	if r, err := c.Messaging.HealthCheck(ctx, "2125550123"); err != nil || r["inService"] != true {
+		t.Fatalf("HealthCheck: %v", err)
+	}
+	if r, err := c.Messaging.HealthSamples(ctx, "2125550123"); err != nil || r["samples"] == nil {
+		t.Fatalf("HealthSamples: %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------- Numbers ---
 
 func TestNumbersFullSurface(t *testing.T) {

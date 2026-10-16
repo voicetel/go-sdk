@@ -116,6 +116,16 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	assertErr(t, "Messaging.CreateCampaign", err)
 	_, err = c.Messaging.NumbersState(ctx, nil)
 	assertErr(t, "Messaging.NumbersState", err)
+	_, err = c.Messaging.Health(ctx)
+	assertErr(t, "Messaging.Health", err)
+	_, err = c.Messaging.HealthAlerts(ctx)
+	assertErr(t, "Messaging.HealthAlerts", err)
+	_, err = c.Messaging.SetHealthAlerts(ctx, true)
+	assertErr(t, "Messaging.SetHealthAlerts", err)
+	_, err = c.Messaging.HealthCheck(ctx, "2125550123")
+	assertErr(t, "Messaging.HealthCheck", err)
+	_, err = c.Messaging.HealthSamples(ctx, "2125550123")
+	assertErr(t, "Messaging.HealthSamples", err)
 
 	// Numbers
 	_, err = c.Numbers.List(ctx)

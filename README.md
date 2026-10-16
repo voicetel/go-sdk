@@ -2,7 +2,7 @@
 
 The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api/v2.2/) — provision numbers, place orders, validate e911, send messages, and manage your account, all with strongly-typed, context-aware Go.
 
-![Version](https://img.shields.io/badge/version-2.2.14-blue)
+![Version](https://img.shields.io/badge/version-2.2.15-blue)
 ![Go](https://img.shields.io/badge/go-1.22%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
@@ -43,7 +43,7 @@ The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api
 - **Account** — profile, sub-accounts, CDRs, credits, payments, MRC, registration, password recovery.
 - **e911** — record provisioning, address validation, lookup, removal.
 - **Gateways** — list, create, update, delete, view bound numbers.
-- **Messaging** — SMS & MMS sending, message history, 10DLC brand and campaign registration, per-number messaging state.
+- **Messaging** — SMS & MMS sending, message history, 10DLC brand and campaign registration, per-number messaging state, and messaging health (account overview, per-number live check, spam-blocked samples, alert-email setting).
 - **Lookups** — CNAM and LRN dips.
 - **iNumbering** — inventory search, coverage queries, number orders, port-in submissions, port-out availability.
 - **Support** — ticket create / read / update / delete, threaded messages, replies.
@@ -58,16 +58,16 @@ The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api
 
 ### 📦 Clean Distribution
 - Zero codegen footprint — every byte hand-written.
-- Single module (`github.com/voicetel/go-sdk`); install with `go get`.
+- Single module (`github.com/voicetel/go-sdk/v2`); install with `go get`.
 - No external dependencies beyond the standard library.
 
 ## 🚀 Installation
 
 ```bash
-go get github.com/voicetel/go-sdk
+go get github.com/voicetel/go-sdk/v2
 ```
 
-Requires Go 1.22 or later.
+Requires Go 1.22 or later. The module path carries the `/v2` major-version suffix, so release tags resolve with `go get github.com/voicetel/go-sdk/v2@v2.2.15`.
 
 ## 🏁 Quickstart
 
@@ -79,7 +79,7 @@ import (
     "fmt"
     "log"
 
-    voicetel "github.com/voicetel/go-sdk"
+    voicetel "github.com/voicetel/go-sdk/v2"
 )
 
 func main() {
@@ -222,8 +222,8 @@ c := voicetel.NewClient(voicetel.WithHTTPClient(&http.Client{
 
 These endpoints are limited to **6 requests per hour per IP**:
 
-- `account/info`
-- `account/mrc` (`Account.RecurringCharges`)
+- `account`
+- `account/recurring-charges` (`Account.RecurringCharges`)
 - `account/cdr` (`Account.CDR`)
 - `account/api-key` (`Client.Login`)
 
