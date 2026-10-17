@@ -2,7 +2,7 @@
 
 The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api/v2.2/) — provision numbers, place orders, validate e911, send messages, and manage your account, all with strongly-typed, context-aware Go.
 
-![Version](https://img.shields.io/badge/version-2.2.15-blue)
+![Version](https://img.shields.io/badge/version-2.2.16-blue)
 ![Go](https://img.shields.io/badge/go-1.22%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
@@ -26,7 +26,7 @@ The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api
 ## ✨ Features
 
 ### 🛡️ Strongly Typed End-to-End
-- **Native Go structs** for every one of the 73 API operations — JSON encoded with `encoding/json`, no reflection magic.
+- **Native Go structs** for every one of the 79 API operations — JSON encoded with `encoding/json`, no reflection magic.
 - **Pointer types for optional request fields** — distinguish "not set" from "zero" cleanly when PATCH-ing.
 - **Pointer types for nullable response fields** — `ForwardTo *string` lets you tell apart "no forward configured" from an empty destination.
 - **Context-aware throughout.** Every method takes `context.Context` as the first argument; cancel and timeouts propagate down to the HTTP layer.
@@ -67,7 +67,7 @@ The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api
 go get github.com/voicetel/go-sdk/v2
 ```
 
-Requires Go 1.22 or later. The module path carries the `/v2` major-version suffix, so release tags resolve with `go get github.com/voicetel/go-sdk/v2@v2.2.15`.
+Requires Go 1.22 or later. The module path carries the `/v2` major-version suffix, so release tags resolve with `go get github.com/voicetel/go-sdk/v2@v2.2.16`.
 
 ## 🏁 Quickstart
 
@@ -88,7 +88,7 @@ func main() {
     ctx := context.Background()
 
     // Exchange username + password for an API key (one-time per session)
-    if _, err := c.Login(ctx, 1000000001, "hunter2"); err != nil {
+    if _, err := c.Login(ctx, "1000000001", "hunter2"); err != nil {
         log.Fatal(err)
     }
 
@@ -114,7 +114,7 @@ Or, if you already have an API key:
 
 ```go
 c := voicetel.NewClient(voicetel.WithAPIKey("32hex..."))
-coverage, _ := c.INumbering.Coverage(ctx, voicetel.CoverageQuery{State: "NJ"})
+coverage, _ := c.INumbering.Coverage(ctx, voicetel.CoverageQuery{CountBy: "npanxx", LocState: "NJ"})
 for _, bucket := range coverage.Coverage {
     fmt.Printf("%s-%s: %d TNs available\n", bucket.NPA, bucket.NXX, bucket.Count)
 }
@@ -130,7 +130,7 @@ Re-fetch the API key after any password change — the old one is invalidated.
 
 ```go
 c := voicetel.NewClient()
-key, err := c.Login(ctx, 1000000001, "hunter2")
+key, err := c.Login(ctx, "1000000001", "hunter2")
 // `key` is the new 32-hex bearer; the client already has it installed.
 ```
 
@@ -143,7 +143,7 @@ key, err := c.Login(ctx, 1000000001, "hunter2")
 | Authentication | `c.Authentication` | `c.Authentication.Update(ctx, voicetel.AuthPutRequest{AuthType: voicetel.Int(1)})` |
 | e911 | `c.E911` | `c.E911.Validate(ctx, voicetel.E911AddressRequest{...})` |
 | Gateways | `c.Gateways` | `c.Gateways.List(ctx)` |
-| iNumbering | `c.INumbering` | `c.INumbering.SearchInventory(ctx, voicetel.InventoryQuery{NPA: 201})` |
+| iNumbering | `c.INumbering` | `c.INumbering.SearchInventory(ctx, voicetel.InventoryQuery{TnMask: "201555*"})` |
 | Lookups | `c.Lookups` | `c.Lookups.LRN(ctx, "2015550123", "2015550100")` |
 | Messaging | `c.Messaging` | `c.Messaging.Send(ctx, voicetel.MessageSendRequest{...})` |
 | Numbers | `c.Numbers` | `c.Numbers.AssignCampaign(ctx, "2015550123", ...)` |
@@ -193,7 +193,23 @@ Or type-assert to inspect details:
 ```go
 var ae *voicetel.APIError
 if errors.As(err, &ae) {
-    fmt.Printf("status=%d code=%q body=%v\n", ae.StatusCode, ae.Code, ae.Body)
+    fmt.Printf("status=%d code=%d message=%q\n", ae.StatusCode, ae.Code, ae.Message)
+}
+```
+
+A 409 Conflict carries a structured body describing partial success. Decode it
+with the typed helpers — `AclConflict` for POST/DELETE `/v2.2/acl`,
+`AuthPutConflict` for PUT `/v2.2/auth`:
+
+```go
+_, err := c.ACL.Add(ctx, voicetel.AclModifyRequest{ACL: entries})
+var ae *voicetel.APIError
+if errors.As(err, &ae) && ae.Kind == voicetel.KindConflict {
+    if conflict, ok := ae.AclConflict(); ok {
+        for _, f := range conflict.Failed {
+            fmt.Printf("%s rejected: %s\n", f.CIDR, f.Reason)
+        }
+    }
 }
 ```
 
@@ -222,12 +238,16 @@ c := voicetel.NewClient(voicetel.WithHTTPClient(&http.Client{
 
 These endpoints are limited to **6 requests per hour per IP**:
 
-- `account`
+- `account` (`Account.Get`)
 - `account/recurring-charges` (`Account.RecurringCharges`)
 - `account/cdr` (`Account.CDR`)
 - `account/api-key` (`Client.Login`)
 
-The SDK automatically retries 429 responses with `Retry-After` honored, up to `WithMaxRetries(n)` (default 2). To bump it:
+`POST /v2.2/messaging/health/check` (`Messaging.HealthCheck`) is separately
+limited to **30 checks per hour per account**.
+
+The SDK automatically retries 429 responses with `Retry-After` honored (capped
+at 8s), up to `WithMaxRetries(n)` (default 2). To bump it:
 
 ```go
 c := voicetel.NewClient(

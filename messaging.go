@@ -49,7 +49,7 @@ type MessageRecordValue struct {
 	DestinationNumber string `json:"destinationNumber,omitempty"`
 	Direction         string `json:"direction,omitempty"` // "in" or "out" (sms/mms only)
 	Rate              string `json:"rate,omitempty"`      // billed rate per message (string for precision)
-	Number            int    `json:"number,omitempty"`    // far-end number (sms/mms only)
+	Number            string `json:"number,omitempty"`    // far-end number (sms/mms only)
 	Message           string `json:"message,omitempty"`   // message body (sms/mms only)
 }
 
@@ -131,26 +131,24 @@ type MessagingCampaignStatusData struct {
 	Campaigns []CampaignStatusItem `json:"campaigns"`
 }
 
-// HistoryOptions are the optional query filters for History.
+// HistoryOptions are the query filters for History. Number is required by
+// the API; the rest are optional.
 type HistoryOptions struct {
-	Number string // 10-digit TN whose history to fetch
-	Start  int    // Unix timestamp range start
-	End    int    // Unix timestamp range end (older than Start)
-	Type   string // "sms", "mms", or "dlr"
+	Number string // 10-digit TN on the account whose history to fetch (required)
+	From   int    // Unix timestamp range start (newer); 0 = server default (now)
+	To     int    // Unix timestamp range end (older); 0 = server default (24h ago)
+	Type   string // "sms" (default), "mms", or "dlr"
 }
 
-// History fetches message history. Pass HistoryOptions{} for the default set
-// or populate any combination of fields.
+// History fetches message history for one number, newest first.
 func (s *MessagingService) History(ctx context.Context, opts HistoryOptions) (*MessageHistoryData, error) {
 	q := url.Values{}
-	if opts.Number != "" {
-		q.Set("number", opts.Number)
+	q.Set("number", opts.Number)
+	if opts.From != 0 {
+		q.Set("from", strconv.Itoa(opts.From))
 	}
-	if opts.Start != 0 {
-		q.Set("start", strconv.Itoa(opts.Start))
-	}
-	if opts.End != 0 {
-		q.Set("end", strconv.Itoa(opts.End))
+	if opts.To != 0 {
+		q.Set("to", strconv.Itoa(opts.To))
 	}
 	if opts.Type != "" {
 		q.Set("type", opts.Type)
@@ -180,10 +178,13 @@ func (s *MessagingService) CreateBrand(ctx context.Context, body MessagingBrandC
 	return &out, nil
 }
 
-// CampaignStatus returns the current 10DLC campaign statuses.
-func (s *MessagingService) CampaignStatus(ctx context.Context) (*MessagingCampaignStatusData, error) {
+// CampaignStatus returns the current status of the given 10DLC campaigns.
+// ids holds the alphanumeric campaign ids (max 100); at least one is required.
+func (s *MessagingService) CampaignStatus(ctx context.Context, ids []string) (*MessagingCampaignStatusData, error) {
+	q := url.Values{}
+	q.Set("ids", strings.Join(ids, ","))
 	var out MessagingCampaignStatusData
-	if err := s.c.t.request(ctx, "GET", "/v2.2/messaging/campaigns", nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/messaging/campaigns", q, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -199,12 +200,10 @@ func (s *MessagingService) CreateCampaign(ctx context.Context, body MessagingCam
 }
 
 // NumbersState returns the messaging state for many numbers at once.
-// Pass an empty slice for "all numbers on the account".
+// At least one 10-digit TN is required (max 1000).
 func (s *MessagingService) NumbersState(ctx context.Context, numbers []string) (*NumbersMessagingListData, error) {
 	q := url.Values{}
-	if len(numbers) > 0 {
-		q.Set("numbers", strings.Join(numbers, ","))
-	}
+	q.Set("numbers", strings.Join(numbers, ","))
 	var out NumbersMessagingListData
 	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/messaging", q, nil, &out, true); err != nil {
 		return nil, err

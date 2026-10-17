@@ -163,21 +163,21 @@ func decode(resp *http.Response, out any) error {
 		return nil
 	}
 
-	// Error path — try to extract a structured code/message.
+	// Error path — the spec envelope is
+	// {"status":"error","error":{"code":<int>,"message":<string>}}.
 	var body any = string(raw)
-	var code, message string
+	code := 0
+	message := ""
 	var generic map[string]any
 	if json.Unmarshal(raw, &generic) == nil {
 		body = generic
-		if v, ok := generic["code"].(string); ok {
-			code = v
-		} else if v, ok := generic["error"].(string); ok {
-			code = v
-		}
-		if v, ok := generic["message"].(string); ok {
-			message = v
-		} else if v, ok := generic["error"].(string); ok {
-			message = v
+		if errObj, ok := generic["error"].(map[string]any); ok {
+			if c, ok := errObj["code"].(float64); ok {
+				code = int(c)
+			}
+			if m, ok := errObj["message"].(string); ok {
+				message = m
+			}
 		}
 	}
 	if message == "" {
@@ -208,12 +208,17 @@ func unwrap(raw []byte) ([]byte, error) {
 }
 
 // backoffDelay returns the delay before retry attempt+1. Honors a Retry-After
-// header if the server sent one as integer seconds.
+// header if the server sent one as integer seconds, capped at the same 8s
+// ceiling as the exponential fallback.
 func backoffDelay(attempt int, resp *http.Response) time.Duration {
 	if resp != nil {
 		if h := resp.Header.Get("Retry-After"); h != "" {
 			if secs, err := strconv.Atoi(h); err == nil && secs >= 0 {
-				return time.Duration(secs) * time.Second
+				d := time.Duration(secs) * time.Second
+				if d > 8*time.Second {
+					d = 8 * time.Second
+				}
+				return d
 			}
 		}
 	}

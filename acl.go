@@ -1,11 +1,15 @@
 package voicetel
 
-import "context"
+import (
+	"context"
+	"net/url"
+	"strings"
+)
 
 // ACLService manages the IP allowlist (CIDR entries) bound to the account.
 type ACLService struct{ c *Client }
 
-// AclModifyRequest is the body for POST /v2.2/acl (add) and DELETE /v2.2/acl (remove).
+// AclModifyRequest is the body for POST /v2.2/acl (add).
 type AclModifyRequest struct {
 	ACL []CidrEntry `json:"acl"`
 }
@@ -65,9 +69,11 @@ func (s *ACLService) Add(ctx context.Context, body AclModifyRequest) (*AclAddDat
 }
 
 // Remove removes one or more CIDR entries from the allowlist.
-func (s *ACLService) Remove(ctx context.Context, body AclModifyRequest) (*AclRemoveData, error) {
+func (s *ACLService) Remove(ctx context.Context, cidrs []string) (*AclRemoveData, error) {
+	q := url.Values{}
+	q.Set("cidrs", strings.Join(cidrs, ","))
 	var out AclRemoveData
-	if err := s.c.t.request(ctx, "DELETE", "/v2.2/acl", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "DELETE", "/v2.2/acl", q, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil

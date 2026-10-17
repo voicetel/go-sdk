@@ -190,48 +190,45 @@ type PortAvailabilityData struct {
 	Reason             *string `json:"reason"`             // nullable when portable
 }
 
-// InventoryQuery are the query filters for SearchInventory.
+// InventoryQuery are the query filters for SearchInventory. TnMask is
+// required by the API; the rest are optional refinements.
 type InventoryQuery struct {
-	NPA        int
-	NXX        int
-	State      string
-	RateCenter string
-	Contains   string
-	EndsWith   string
-	Limit      int
+	TnMask     string // prefix or wildcard pattern: "201", "201555", "201555*" (required)
+	Quantity   int    // max results, 1..1000; 0 = server default (10)
+	Province   string // 2-letter US state or Canadian province code
+	RateCenter string // rate-center name
+	Lata       string // LATA code
 }
 
-// CoverageQuery are the query filters for Coverage.
+// CoverageQuery are the query filters for Coverage. CountBy is required by
+// the API; the rest are optional filters.
 type CoverageQuery struct {
-	State      string
-	RateCenter string
+	CountBy  string // aggregation dimension: "state", "city", "rateCenter", "npanxx", or "block" (required)
+	LocState string // state or province code (e.g. "NJ")
+	City     string // city name
+	RcAbbre  string // rate-center abbreviation
+	NPA      string // area code
+	Lata     string // LATA code
 }
 
 // ------------------------------------------------------------------ methods ---
 
-// SearchInventory searches available TNs by NPA/NXX/state/rate-center/etc.
+// SearchInventory searches available TNs by prefix/wildcard mask, optionally
+// refined by province, rate center, or LATA.
 func (s *INumberingService) SearchInventory(ctx context.Context, q InventoryQuery) (*InventorySearchData, error) {
 	v := url.Values{}
-	if q.NPA != 0 {
-		v.Set("npa", strconv.Itoa(q.NPA))
+	v.Set("tnMask", q.TnMask)
+	if q.Quantity != 0 {
+		v.Set("quantity", strconv.Itoa(q.Quantity))
 	}
-	if q.NXX != 0 {
-		v.Set("nxx", strconv.Itoa(q.NXX))
-	}
-	if q.State != "" {
-		v.Set("state", q.State)
+	if q.Province != "" {
+		v.Set("province", q.Province)
 	}
 	if q.RateCenter != "" {
-		v.Set("ratecenter", q.RateCenter)
+		v.Set("rateCenter", q.RateCenter)
 	}
-	if q.Contains != "" {
-		v.Set("contains", q.Contains)
-	}
-	if q.EndsWith != "" {
-		v.Set("endswith", q.EndsWith)
-	}
-	if q.Limit != 0 {
-		v.Set("limit", strconv.Itoa(q.Limit))
+	if q.Lata != "" {
+		v.Set("lata", q.Lata)
 	}
 	var out InventorySearchData
 	if err := s.c.t.request(ctx, "GET", "/v2.2/inventory", v, nil, &out, true); err != nil {
@@ -243,11 +240,21 @@ func (s *INumberingService) SearchInventory(ctx context.Context, q InventoryQuer
 // Coverage returns aggregated availability buckets.
 func (s *INumberingService) Coverage(ctx context.Context, q CoverageQuery) (*InventoryCoverageData, error) {
 	v := url.Values{}
-	if q.State != "" {
-		v.Set("state", q.State)
+	v.Set("countBy", q.CountBy)
+	if q.LocState != "" {
+		v.Set("locState", q.LocState)
 	}
-	if q.RateCenter != "" {
-		v.Set("ratecenter", q.RateCenter)
+	if q.City != "" {
+		v.Set("city", q.City)
+	}
+	if q.RcAbbre != "" {
+		v.Set("rcAbbre", q.RcAbbre)
+	}
+	if q.NPA != "" {
+		v.Set("npa", q.NPA)
+	}
+	if q.Lata != "" {
+		v.Set("lata", q.Lata)
 	}
 	var out InventoryCoverageData
 	if err := s.c.t.request(ctx, "GET", "/v2.2/inventory/coverage", v, nil, &out, true); err != nil {
@@ -275,10 +282,11 @@ func (s *INumberingService) Ports(ctx context.Context) (*PortListData, error) {
 	return &out, nil
 }
 
-// Port fetches detail for one port-in by id.
-func (s *INumberingService) Port(ctx context.Context, id int) (*PortDetailData, error) {
+// Port fetches detail for one port-in by id (the 5-character pid returned by
+// SubmitPort, or an id from Ports).
+func (s *INumberingService) Port(ctx context.Context, id string) (*PortDetailData, error) {
 	var out PortDetailData
-	if err := s.c.t.request(ctx, "GET", "/v2.2/ports/"+strconv.Itoa(id), nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/ports/"+url.PathEscape(id), nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -297,7 +305,7 @@ func (s *INumberingService) SubmitPort(ctx context.Context, body PortSubmitReque
 // PortAvailability checks whether a given TN can be ported in.
 func (s *INumberingService) PortAvailability(ctx context.Context, number string) (*PortAvailabilityData, error) {
 	var out PortAvailabilityData
-	if err := s.c.t.request(ctx, "GET", "/v2.2/ports/availability/"+number, nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/ports/availability/"+url.PathEscape(number), nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil

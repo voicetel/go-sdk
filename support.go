@@ -188,7 +188,8 @@ type TicketData struct {
 
 // TicketsListData is the response data for GET /v2.2/support/tickets.
 type TicketsListData struct {
-	Tickets []SupportConversation `json:"tickets"`
+	TotalCount int                   `json:"totalCount"` // total tickets matching the filter
+	Tickets    []SupportConversation `json:"tickets"`
 }
 
 // TicketThreadsData is the response data for GET /v2.2/support/tickets/{id}/messages.

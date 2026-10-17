@@ -1,6 +1,9 @@
 package voicetel
 
-import "context"
+import (
+	"context"
+	"net/url"
+)
 
 // E911Service manages e911 records and address validation.
 //
@@ -100,7 +103,7 @@ func (s *E911Service) Validate(ctx context.Context, body E911AddressRequest) (*E
 // Get fetches the e911 record for `dn`.
 func (s *E911Service) Get(ctx context.Context, dn string) (*E911RecordData, error) {
 	var out E911RecordData
-	if err := s.c.t.request(ctx, "GET", "/v2.2/e911/"+dn, nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/e911/"+url.PathEscape(dn), nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -109,7 +112,7 @@ func (s *E911Service) Get(ctx context.Context, dn string) (*E911RecordData, erro
 // Provision uses a previously-validated AddressID to provision e911 for `dn`.
 func (s *E911Service) Provision(ctx context.Context, dn string, body E911ProvisionByIDRequest) (*E911RecordData, error) {
 	var out E911RecordData
-	if err := s.c.t.request(ctx, "PUT", "/v2.2/e911/"+dn, nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/e911/"+url.PathEscape(dn), nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -117,5 +120,5 @@ func (s *E911Service) Provision(ctx context.Context, dn string, body E911Provisi
 
 // Remove deletes the e911 record for `dn`. Returns nil on 204 No Content.
 func (s *E911Service) Remove(ctx context.Context, dn string) error {
-	return s.c.t.request(ctx, "DELETE", "/v2.2/e911/"+dn, nil, nil, nil, true)
+	return s.c.t.request(ctx, "DELETE", "/v2.2/e911/"+url.PathEscape(dn), nil, nil, nil, true)
 }

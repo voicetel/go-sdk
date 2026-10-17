@@ -1,6 +1,9 @@
 package voicetel
 
-import "context"
+import (
+	"context"
+	"net/url"
+)
 
 // LookupsService provides CNAM and LRN dips.
 //
@@ -41,7 +44,7 @@ type LrnLookupData struct {
 // CNAM performs a CNAM dip on `number` (10-digit TN).
 func (s *LookupsService) CNAM(ctx context.Context, number string) (*CnamData, error) {
 	var out CnamData
-	if err := s.c.t.request(ctx, "GET", "/v2.2/cnam/"+number, nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/cnam/"+url.PathEscape(number), nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -51,7 +54,7 @@ func (s *LookupsService) CNAM(ctx context.Context, number string) (*CnamData, er
 // only for billing/auth — it is not echoed back.
 func (s *LookupsService) LRN(ctx context.Context, number, ani string) (*LrnLookupData, error) {
 	var out LrnLookupData
-	if err := s.c.t.request(ctx, "GET", "/v2.2/lrn/"+number+"/"+ani, nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/lrn/"+url.PathEscape(number)+"/"+url.PathEscape(ani), nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil

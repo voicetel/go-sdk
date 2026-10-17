@@ -15,7 +15,7 @@ type CidrEntry struct {
 // Useful when populating optional request fields:
 //
 //	c.Numbers.SetForward(ctx, "2015550123", voicetel.NumberForwardRequest{
-//	    Destination: 2125550123,
+//	    Destination: "2125550123",
 //	})
 //
 // (most fields take plain values; the helper is here for fields like SetTimezone

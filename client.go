@@ -122,11 +122,11 @@ func (c *Client) APIKey() string { return c.t.apiKey }
 
 // Login exchanges username + password for a 32-hex API key and installs it on
 // this client. The exchange counts against the 6 req/hour/IP rate limit shared
-// by every account/* endpoint (cdr, mrc, payments, registration, api-key).
+// with GET /v2.2/account, GET /v2.2/account/cdr, and
+// GET /v2.2/account/recurring-charges.
 //
-// The endpoint accepts username as either an int or a string of digits. Use
-// the typed forms (int) where you can.
-func (c *Client) Login(ctx context.Context, username int, password string) (string, error) {
+// The username is the numeric account id as a string (e.g. "1000000001").
+func (c *Client) Login(ctx context.Context, username string, password string) (string, error) {
 	var data AccountApiKeyData
 	body := map[string]any{"username": username, "password": password}
 	if err := c.t.request(ctx, "POST", "/v2.2/account/api-key", nil, body, &data, false); err != nil {

@@ -1,6 +1,10 @@
 package voicetel
 
-import "context"
+import (
+	"context"
+	"net/url"
+	"strings"
+)
 
 // NumbersService is the entry point for every operation on a telephone number
 // owned by the account.
@@ -76,11 +80,6 @@ type NumberMoveRequest struct {
 // PortOutPinUpdateRequest is the body for PATCH /v2.2/numbers/{number}/port-out-pin.
 type PortOutPinUpdateRequest struct {
 	PIN string `json:"pin"` // 4-digit numeric
-}
-
-// BulkUnassignRequest is the body for DELETE /v2.2/numbers/messaging-campaign.
-type BulkUnassignRequest struct {
-	Numbers []string `json:"numbers"`
 }
 
 // ------------------------------------------------------- entities & responses ---
@@ -288,7 +287,7 @@ func (s *NumbersService) Add(ctx context.Context, body NumberAddRequest) (*Numbe
 // Get fetches one TN.
 func (s *NumbersService) Get(ctx context.Context, number string) (*NumberDetail, error) {
 	var out NumberDetail
-	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/"+number, nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/"+url.PathEscape(number), nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -296,13 +295,13 @@ func (s *NumbersService) Get(ctx context.Context, number string) (*NumberDetail,
 
 // Remove detaches a TN. Returns nil on 204 No Content.
 func (s *NumbersService) Remove(ctx context.Context, number string) error {
-	return s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+number, nil, nil, nil, true)
+	return s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+url.PathEscape(number), nil, nil, nil, true)
 }
 
 // Move transfers a TN to another account on the same authenticated org.
 func (s *NumbersService) Move(ctx context.Context, number string, body NumberMoveRequest) (*NumberMoveData, error) {
 	var out NumberMoveData
-	if err := s.c.t.request(ctx, "PATCH", "/v2.2/numbers/"+number, nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PATCH", "/v2.2/numbers/"+url.PathEscape(number), nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -310,13 +309,13 @@ func (s *NumbersService) Move(ctx context.Context, number string, body NumberMov
 
 // Release returns a TN to the network. Returns nil on 204 No Content.
 func (s *NumbersService) Release(ctx context.Context, number string) error {
-	return s.c.t.request(ctx, "POST", "/v2.2/numbers/"+number+"/release", nil, nil, nil, true)
+	return s.c.t.request(ctx, "POST", "/v2.2/numbers/"+url.PathEscape(number)+"/release", nil, nil, nil, true)
 }
 
 // SetRoute updates a TN's outbound route.
 func (s *NumbersService) SetRoute(ctx context.Context, number string, body NumberRouteRequest) (*NumberRouteData, error) {
 	var out NumberRouteData
-	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+number+"/route", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/route", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -325,7 +324,7 @@ func (s *NumbersService) SetRoute(ctx context.Context, number string, body Numbe
 // SetTranslation updates a TN's DNIS translation.
 func (s *NumbersService) SetTranslation(ctx context.Context, number string, body NumberTranslationRequest) (*NumberTranslationData, error) {
 	var out NumberTranslationData
-	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+number+"/translation", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/translation", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -334,7 +333,7 @@ func (s *NumbersService) SetTranslation(ctx context.Context, number string, body
 // SetCNAM toggles inbound CNAM lookup for a TN.
 func (s *NumbersService) SetCNAM(ctx context.Context, number string, body NumberCnamRequest) (*NumberCnamData, error) {
 	var out NumberCnamData
-	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+number+"/cnam", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/cnam", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -343,7 +342,7 @@ func (s *NumbersService) SetCNAM(ctx context.Context, number string, body Number
 // SetLidb updates a TN's outbound caller name (LIDB).
 func (s *NumbersService) SetLidb(ctx context.Context, number string, body NumberLidbRequest) (*NumberLidbData, error) {
 	var out NumberLidbData
-	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+number+"/lidb", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/lidb", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -352,7 +351,7 @@ func (s *NumbersService) SetLidb(ctx context.Context, number string, body Number
 // GetFax reads fax-to-email routing.
 func (s *NumbersService) GetFax(ctx context.Context, number string) (*NumberFaxData, error) {
 	var out NumberFaxData
-	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/"+number+"/fax", nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/"+url.PathEscape(number)+"/fax", nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -361,7 +360,7 @@ func (s *NumbersService) GetFax(ctx context.Context, number string) (*NumberFaxD
 // SetFax enables fax-to-email routing.
 func (s *NumbersService) SetFax(ctx context.Context, number string, body NumberFaxRequest) (*NumberFaxData, error) {
 	var out NumberFaxData
-	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+number+"/fax", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/fax", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -369,13 +368,13 @@ func (s *NumbersService) SetFax(ctx context.Context, number string, body NumberF
 
 // RemoveFax disables fax-to-email. Returns nil on 204 No Content.
 func (s *NumbersService) RemoveFax(ctx context.Context, number string) error {
-	return s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+number+"/fax", nil, nil, nil, true)
+	return s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+url.PathEscape(number)+"/fax", nil, nil, nil, true)
 }
 
 // SetForward enables call forwarding.
 func (s *NumbersService) SetForward(ctx context.Context, number string, body NumberForwardRequest) (*NumberForwardData, error) {
 	var out NumberForwardData
-	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+number+"/forward", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/forward", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -383,13 +382,13 @@ func (s *NumbersService) SetForward(ctx context.Context, number string, body Num
 
 // RemoveForward disables call forwarding. Returns nil on 204 No Content.
 func (s *NumbersService) RemoveForward(ctx context.Context, number string) error {
-	return s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+number+"/forward", nil, nil, nil, true)
+	return s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+url.PathEscape(number)+"/forward", nil, nil, nil, true)
 }
 
 // GetSMS reads SMS routing.
 func (s *NumbersService) GetSMS(ctx context.Context, number string) (*NumberSmsData, error) {
 	var out NumberSmsData
-	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/"+number+"/sms", nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/"+url.PathEscape(number)+"/sms", nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -398,7 +397,7 @@ func (s *NumbersService) GetSMS(ctx context.Context, number string) (*NumberSmsD
 // SetSMS configures SMS routing.
 func (s *NumbersService) SetSMS(ctx context.Context, number string, body NumberSmsRequest) (*NumberSmsData, error) {
 	var out NumberSmsData
-	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+number+"/sms", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/sms", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -406,13 +405,13 @@ func (s *NumbersService) SetSMS(ctx context.Context, number string, body NumberS
 
 // RemoveSMS clears SMS routing. Returns nil on 204 No Content.
 func (s *NumbersService) RemoveSMS(ctx context.Context, number string) error {
-	return s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+number+"/sms", nil, nil, nil, true)
+	return s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+url.PathEscape(number)+"/sms", nil, nil, nil, true)
 }
 
 // GetMessaging returns the messaging state for one TN.
 func (s *NumbersService) GetMessaging(ctx context.Context, number string) (*NumberMessagingState, error) {
 	var out NumberMessagingState
-	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/"+number+"/messaging", nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/"+url.PathEscape(number)+"/messaging", nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -421,7 +420,7 @@ func (s *NumbersService) GetMessaging(ctx context.Context, number string) (*Numb
 // PatchMessaging updates inbound/outbound routing for one TN.
 func (s *NumbersService) PatchMessaging(ctx context.Context, number string, body NumberMessagingPatchRequest) (*NumberMessagingPatchData, error) {
 	var out NumberMessagingPatchData
-	if err := s.c.t.request(ctx, "PATCH", "/v2.2/numbers/"+number+"/messaging", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PATCH", "/v2.2/numbers/"+url.PathEscape(number)+"/messaging", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -434,26 +433,31 @@ func (s *NumbersService) PatchMessaging(ctx context.Context, number string, body
 // refused (409).
 func (s *NumbersService) AssignCampaign(ctx context.Context, number string, body NumberCampaignAssignRequest) (*NumberMessagingCampaignAssignData, error) {
 	var out NumberMessagingCampaignAssignData
-	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+number+"/messaging-campaign", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/messaging-campaign", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// UnassignCampaign removes the campaign binding from a TN.
-func (s *NumbersService) UnassignCampaign(ctx context.Context, number string) (*NumberMessagingCampaignUnassignData, error) {
+// UnassignCampaign removes the binding to campaignID from a TN.
+func (s *NumbersService) UnassignCampaign(ctx context.Context, number, campaignID string) (*NumberMessagingCampaignUnassignData, error) {
+	q := url.Values{}
+	q.Set("campaignId", campaignID)
 	var out NumberMessagingCampaignUnassignData
-	if err := s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+number+"/messaging-campaign", nil, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+url.PathEscape(number)+"/messaging-campaign", q, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// BulkUnassignCampaign removes the campaign binding from many TNs at once.
-func (s *NumbersService) BulkUnassignCampaign(ctx context.Context, numbers []string) (*NumbersMessagingCampaignUnassignData, error) {
-	body := BulkUnassignRequest{Numbers: numbers}
+// BulkUnassignCampaign removes the binding to campaignID from many TNs at
+// once (max 1000). The network is resolved via CSP sharing.
+func (s *NumbersService) BulkUnassignCampaign(ctx context.Context, numbers []string, campaignID string) (*NumbersMessagingCampaignUnassignData, error) {
+	q := url.Values{}
+	q.Set("numbers", strings.Join(numbers, ","))
+	q.Set("campaignId", campaignID)
 	var out NumbersMessagingCampaignUnassignData
-	if err := s.c.t.request(ctx, "DELETE", "/v2.2/numbers/messaging-campaign", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "DELETE", "/v2.2/numbers/messaging-campaign", q, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -465,7 +469,7 @@ func (s *NumbersService) BulkUnassignCampaign(ctx context.Context, numbers []str
 // Changed=false; a newly set PIN returns Changed=true.
 func (s *NumbersService) SetPortOutPin(ctx context.Context, number string, body PortOutPinUpdateRequest) (*PortOutPinUpdateData, error) {
 	var out PortOutPinUpdateData
-	if err := s.c.t.request(ctx, "PATCH", "/v2.2/numbers/"+number+"/port-out-pin", nil, body, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "PATCH", "/v2.2/numbers/"+url.PathEscape(number)+"/port-out-pin", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil

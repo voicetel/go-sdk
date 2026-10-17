@@ -39,9 +39,18 @@ type AuthPutData struct {
 	Updated []AuthUpdatedEntry `json:"updated"`
 }
 
-// AuthPutConflictData is the data payload returned in a 409 from PUT /v2.2/auth.
+// AuthFieldError is one per-field rejection inside AuthPutConflictData.
+type AuthFieldError struct {
+	Field   string `json:"field"`   // "authType" or "password"
+	Message string `json:"message"` // why the field was rejected
+}
+
+// AuthPutConflictData is the structured body returned in a 409 from
+// PUT /v2.2/auth: fields applied before the conflict, plus the per-field
+// rejections. Decode it from an error with APIError.AuthPutConflict.
 type AuthPutConflictData struct {
 	Updated []AuthUpdatedEntry `json:"updated,omitempty"`
+	Errors  []AuthFieldError   `json:"errors,omitempty"`
 }
 
 // Get returns the current auth mode + allowlist.

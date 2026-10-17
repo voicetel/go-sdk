@@ -57,8 +57,14 @@ func TestAccountFullSurface(t *testing.T) {
 			}
 			return 200, `{"status":"success","data":{"updated":["timezone"]}}`
 		},
-		"POST /v2.2/account":                  created(`{"username":"2","password":"p"}`),
-		"POST /v2.2/accounts":                 created(`{"username":"3","password":"q"}`),
+		"POST /v2.2/account": created(`{"username":"2","password":"p"}`),
+		"POST /v2.2/accounts": func(r *http.Request) (int, string) {
+			// Signup is public: no Authorization header may be sent.
+			if h := r.Header.Get("Authorization"); h != "" {
+				t.Errorf("signup should not send Authorization, got %q", h)
+			}
+			return 201, `{"status":"success","data":{"username":"3","password":"q"}}`
+		},
 		"GET /v2.2/account/cdr":               ok(`{"start":1,"end":2,"cdr":[{"id":"r1","key":["1","2"],"value":{"dur":"40","nr":"0.025"}}]}`),
 		"GET /v2.2/account/credits":           ok(`{"credits":[{"amount":25,"date":"2024-01-01","paid":false}]}`),
 		"GET /v2.2/account/recurring-charges": ok(`{"charges":[{"amount":0.5,"description":"DID"}],"total":0.5}`),
@@ -73,7 +79,7 @@ func TestAccountFullSurface(t *testing.T) {
 	if r, err := c.Account.Update(ctx, AccountPutRequest{Timezone: String("UTC")}); err != nil || r.Updated[0] != "timezone" {
 		t.Fatalf("Update: %v", err)
 	}
-	if r, err := c.Account.Add(ctx, AccountAddRequest{Username: 2, Name: "S", Email: "s@x.com"}); err != nil || r.Password != "p" {
+	if r, err := c.Account.Add(ctx, AccountAddRequest{Username: "2", Name: "S", Email: "s@x.com"}); err != nil || r.Password != "p" {
 		t.Fatalf("Add: %v", err)
 	}
 	if r, err := c.Account.Signup(ctx, AccountSignupRequest{Name: "S", Email: "s@x.com"}); err != nil || r.Password != "q" {
@@ -82,7 +88,7 @@ func TestAccountFullSurface(t *testing.T) {
 	if r, err := c.Account.CDR(ctx, 1, 2); err != nil || len(r.Cdr) != 1 || r.Cdr[0].Value.Dur != "40" {
 		t.Fatalf("CDR: %v", err)
 	}
-	if r, err := c.Account.Credits(ctx); err != nil || r.Credits[0].Amount != 25 {
+	if r, err := c.Account.Credits(ctx, ""); err != nil || r.Credits[0].Amount != 25 {
 		t.Fatalf("Credits: %v", err)
 	}
 	if r, err := c.Account.RecurringCharges(ctx); err != nil || r.Total != 0.5 {
@@ -104,9 +110,18 @@ func TestAccountFullSurface(t *testing.T) {
 func TestACLFullSurface(t *testing.T) {
 	ctx := context.Background()
 	c, _ := mux(t, map[string]func(*http.Request) (int, string){
-		"GET /v2.2/acl":    ok(`{"acl":[{"cidr":"203.0.113.0/24"}]}`),
-		"POST /v2.2/acl":   ok(`{"added":[{"cidr":"203.0.113.0/24"}]}`),
-		"DELETE /v2.2/acl": ok(`{"removed":[{"cidr":"203.0.113.0/24"}]}`),
+		"GET /v2.2/acl":  ok(`{"acl":[{"cidr":"203.0.113.0/24"}]}`),
+		"POST /v2.2/acl": ok(`{"added":[{"cidr":"203.0.113.0/24"}]}`),
+		"DELETE /v2.2/acl": func(r *http.Request) (int, string) {
+			// Spec: DELETE /v2.2/acl takes a required cidrs query param, no body.
+			if got := r.URL.Query().Get("cidrs"); got != "203.0.113.0/24,203.0.113.1/32" {
+				t.Errorf("cidrs = %q", got)
+			}
+			if r.Body != nil && r.ContentLength > 0 {
+				t.Errorf("Remove must not send a body (ContentLength=%d)", r.ContentLength)
+			}
+			return 200, `{"status":"success","data":{"removed":[{"cidr":"203.0.113.0/24"}]}}`
+		},
 	})
 	body := AclModifyRequest{ACL: []CidrEntry{{CIDR: "203.0.113.0/24"}}}
 	if r, err := c.ACL.List(ctx); err != nil || r.ACL[0].CIDR != "203.0.113.0/24" {
@@ -115,7 +130,7 @@ func TestACLFullSurface(t *testing.T) {
 	if r, err := c.ACL.Add(ctx, body); err != nil || r.Added[0].CIDR != "203.0.113.0/24" {
 		t.Fatalf("Add: %v", err)
 	}
-	if r, err := c.ACL.Remove(ctx, body); err != nil || r.Removed[0].CIDR != "203.0.113.0/24" {
+	if r, err := c.ACL.Remove(ctx, []string{"203.0.113.0/24", "203.0.113.1/32"}); err != nil || r.Removed[0].CIDR != "203.0.113.0/24" {
 		t.Fatalf("Remove: %v", err)
 	}
 }
@@ -226,21 +241,47 @@ func TestLookupsFullSurface(t *testing.T) {
 func TestMessagingFullSurface(t *testing.T) {
 	ctx := context.Background()
 	c, _ := mux(t, map[string]func(*http.Request) (int, string){
-		"GET /v2.2/messages":          ok(`{"number":"2015550100","type":"sms","fromTs":1,"toTs":2,"messages":[]}`),
+		"GET /v2.2/messages": func(r *http.Request) (int, string) {
+			// Spec: number is required; the range params are named from/to.
+			q := r.URL.Query()
+			if q.Get("number") != "2015550100" || q.Get("from") != "1" || q.Get("to") != "2" || q.Get("type") != "sms" {
+				t.Errorf("history query wrong: %s", r.URL.RawQuery)
+			}
+			return 200, `{"status":"success","data":{"number":"2015550100","type":"sms","fromTs":1,"toTs":2,` +
+				`"messages":[{"id":"m1","key":["2015550123",1747345200],` +
+				`"value":{"sourceNumber":"2015550100","destinationNumber":"2015550123","direction":"out","rate":"0.0150","number":"2015550123","message":"hi"}}]}}`
+		},
 		"POST /v2.2/messages":         created(`{"id":"x","type":"sms","fromNumber":"2015550100","toNumber":"2015550123","parts":1}`),
 		"POST /v2.2/messaging/brands": created(`{"result":{"statusCode":"200","status":"Success"}}`),
-		"GET /v2.2/messaging/campaigns": ok(`{"campaigns":[` +
-			`{"id":"C1","status":"CAMPAIGN_DCA_COMPLETE","numbers":["2015550123"],` +
-			`"dca":{"electionComplete":true,"electedCarriers":["AT&T","T-Mobile"],` +
-			`"carriers":[{"carrier":"T-Mobile","status":"ACTIVE","detail":"Campaign approved",` +
-			`"updatedAt":"2026-10-13T09:30:00Z"}]}},` +
-			`{"id":"C2","status":"CAMPAIGN_INVALID_ID","numbers":[],"dca":null}]}`),
+		"GET /v2.2/messaging/campaigns": func(r *http.Request) (int, string) {
+			// Spec: ids is a required comma-separated query param.
+			if got := r.URL.Query().Get("ids"); got != "C1,C2" {
+				t.Errorf("ids = %q", got)
+			}
+			return 200, `{"status":"success","data":{"campaigns":[` +
+				`{"id":"C1","status":"CAMPAIGN_DCA_COMPLETE","numbers":["2015550123"],` +
+				`"dca":{"electionComplete":true,"electedCarriers":["AT&T","T-Mobile"],` +
+				`"carriers":[{"carrier":"T-Mobile","status":"ACTIVE","detail":"Campaign approved",` +
+				`"updatedAt":"2026-10-13T09:30:00Z"}]}},` +
+				`{"id":"C2","status":"CAMPAIGN_INVALID_ID","numbers":[],"dca":null}]}}`
+		},
 		"POST /v2.2/messaging/campaigns": created(`{"result":{"statusCode":"200","status":"Success"}}`),
-		"GET /v2.2/numbers/messaging":    ok(`{"numbers":[]}`),
+		"GET /v2.2/numbers/messaging": func(r *http.Request) (int, string) {
+			// Spec: numbers is a required query param.
+			if got := r.URL.Query().Get("numbers"); got != "2015550123" {
+				t.Errorf("numbers = %q", got)
+			}
+			return 200, `{"status":"success","data":{"numbers":[]}}`
+		},
 	})
 
-	if r, err := c.Messaging.History(ctx, HistoryOptions{Number: "2015550100", Start: 1, End: 2, Type: "sms"}); err != nil || r.Type != "sms" {
+	rh, err := c.Messaging.History(ctx, HistoryOptions{Number: "2015550100", From: 1, To: 2, Type: "sms"})
+	if err != nil || rh.Type != "sms" {
 		t.Fatalf("History: %v", err)
+	}
+	// v2.2.16: value.number is a string per the spec.
+	if v := rh.Messages[0].Value; v.Number != "2015550123" || v.Direction != "out" {
+		t.Errorf("history record value not decoded: %+v", v)
 	}
 	if r, err := c.Messaging.Send(ctx, MessageSendRequest{FromNumber: "2015550100", ToNumber: "2015550123", Text: "hi"}); err != nil || r.ID != "x" {
 		t.Fatalf("Send: %v", err)
@@ -248,7 +289,7 @@ func TestMessagingFullSurface(t *testing.T) {
 	if r, err := c.Messaging.CreateBrand(ctx, MessagingBrandCreateRequest{MessagingBrandID: "BABC", MessagingBrandName: "X"}); err != nil || r.Result.Status != "Success" {
 		t.Fatalf("CreateBrand: %v", err)
 	}
-	if r, err := c.Messaging.CampaignStatus(ctx); err != nil || r.Campaigns[0].ID != "C1" {
+	if r, err := c.Messaging.CampaignStatus(ctx, []string{"C1", "C2"}); err != nil || r.Campaigns[0].ID != "C1" {
 		t.Fatalf("CampaignStatus: %v", err)
 	} else if r.Campaigns[0].Dca == nil || !r.Campaigns[0].Dca.ElectionComplete ||
 		r.Campaigns[0].Dca.Carriers[0].Carrier != "T-Mobile" || r.Campaigns[1].Dca != nil {
@@ -259,9 +300,6 @@ func TestMessagingFullSurface(t *testing.T) {
 	}
 	if r, err := c.Messaging.NumbersState(ctx, []string{"2015550123"}); err != nil || r.Numbers == nil {
 		t.Fatalf("NumbersState: %v", err)
-	}
-	if r, err := c.Messaging.NumbersState(ctx, nil); err != nil || r.Numbers == nil {
-		t.Fatalf("NumbersState(nil): %v", err)
 	}
 }
 
@@ -320,30 +358,46 @@ func TestNumbersFullSurface(t *testing.T) {
 	ctx := context.Background()
 	nd := `{"number":"2015550123","translated":"2015550123","route":4,"gateway":"1.2.3.4","cnam":true,"forward":false,"forwardTo":null,"carrier":0,"smsEnabled":true,"faxEnabled":false}`
 	c, _ := mux(t, map[string]func(*http.Request) (int, string){
-		"GET /v2.2/numbers":                                  ok(`{"numbers":[` + nd + `]}`),
-		"POST /v2.2/numbers":                                 created(`{"number":"2015550123","route":4}`),
-		"GET /v2.2/numbers/2015550123":                       ok(nd),
-		"DELETE /v2.2/numbers/2015550123":                    noContent,
-		"PATCH /v2.2/numbers/2015550123":                     ok(`{"number":"2015550123","accountId":99,"route":4}`),
-		"POST /v2.2/numbers/2015550123/release":              noContent,
-		"PUT /v2.2/numbers/2015550123/route":                 ok(`{"number":"2015550123","route":7}`),
-		"PUT /v2.2/numbers/2015550123/translation":           ok(`{"number":"2015550123","translation":"2015551235"}`),
-		"PUT /v2.2/numbers/2015550123/cnam":                  ok(`{"number":"2015550123","cnam":true}`),
-		"PUT /v2.2/numbers/2015550123/lidb":                  ok(`{"number":"2015550123","cnam":"ACME","customerOrderReference":"r1","carrierStatus":"Success"}`),
-		"GET /v2.2/numbers/2015550123/fax":                   ok(`{"number":"2015550123","email":"f@x.com"}`),
-		"PUT /v2.2/numbers/2015550123/fax":                   ok(`{"number":"2015550123","email":"f@x.com"}`),
-		"DELETE /v2.2/numbers/2015550123/fax":                noContent,
-		"PUT /v2.2/numbers/2015550123/forward":               ok(`{"number":"2015550123","forwardTo":"2125550123"}`),
-		"DELETE /v2.2/numbers/2015550123/forward":            noContent,
-		"GET /v2.2/numbers/2015550123/sms":                   ok(`{"number":"2015550123","type":"email","resource":"x@y.com"}`),
-		"PUT /v2.2/numbers/2015550123/sms":                   ok(`{"number":"2015550123","type":"email","resource":"x@y.com"}`),
-		"DELETE /v2.2/numbers/2015550123/sms":                noContent,
-		"GET /v2.2/numbers/2015550123/messaging":             ok(`{"number":"2015550123","enabled":true,"carrier":16,"routeIn":0,"resource":"x","network":"B","campaign":null,"pending":null}`),
-		"PATCH /v2.2/numbers/2015550123/messaging":           ok(`{"number":"2015550123","updated":["routeIn"]}`),
-		"PUT /v2.2/numbers/2015550123/messaging-campaign":    ok(`{"number":"2015550123","campaignId":"C1","status":"enabled","carrier":19,"network":"B","upstreamCnpId":"CAMP003","previousNetwork":null,"previousNetworkCleared":false,"alreadyAssigned":false,"orderId":"229544057","warning":null,"message":null,"job":null}`),
-		"DELETE /v2.2/numbers/2015550123/messaging-campaign": ok(`{"number":"2015550123","campaignId":"C1","network":"B","upstreamCnpId":"CAMP003","unassigned":true}`),
-		"DELETE /v2.2/numbers/messaging-campaign":            ok(`{"campaignId":"C1","network":"B","upstreamCnpId":"CAMP003","unassignedNumbers":["2015550123"],"failed":[]}`),
-		"PATCH /v2.2/numbers/2015550123/port-out-pin":        ok(`{"number":"2015550123","portOutPin":"1234","changed":true}`),
+		"GET /v2.2/numbers":                               ok(`{"numbers":[` + nd + `]}`),
+		"POST /v2.2/numbers":                              created(`{"number":"2015550123","route":4}`),
+		"GET /v2.2/numbers/2015550123":                    ok(nd),
+		"DELETE /v2.2/numbers/2015550123":                 noContent,
+		"PATCH /v2.2/numbers/2015550123":                  ok(`{"number":"2015550123","accountId":99,"route":4}`),
+		"POST /v2.2/numbers/2015550123/release":           noContent,
+		"PUT /v2.2/numbers/2015550123/route":              ok(`{"number":"2015550123","route":7}`),
+		"PUT /v2.2/numbers/2015550123/translation":        ok(`{"number":"2015550123","translation":"2015551235"}`),
+		"PUT /v2.2/numbers/2015550123/cnam":               ok(`{"number":"2015550123","cnam":true}`),
+		"PUT /v2.2/numbers/2015550123/lidb":               ok(`{"number":"2015550123","cnam":"ACME","customerOrderReference":"r1","carrierStatus":"Success"}`),
+		"GET /v2.2/numbers/2015550123/fax":                ok(`{"number":"2015550123","email":"f@x.com"}`),
+		"PUT /v2.2/numbers/2015550123/fax":                ok(`{"number":"2015550123","email":"f@x.com"}`),
+		"DELETE /v2.2/numbers/2015550123/fax":             noContent,
+		"PUT /v2.2/numbers/2015550123/forward":            ok(`{"number":"2015550123","forwardTo":"2125550123"}`),
+		"DELETE /v2.2/numbers/2015550123/forward":         noContent,
+		"GET /v2.2/numbers/2015550123/sms":                ok(`{"number":"2015550123","type":"email","resource":"x@y.com"}`),
+		"PUT /v2.2/numbers/2015550123/sms":                ok(`{"number":"2015550123","type":"email","resource":"x@y.com"}`),
+		"DELETE /v2.2/numbers/2015550123/sms":             noContent,
+		"GET /v2.2/numbers/2015550123/messaging":          ok(`{"number":"2015550123","enabled":true,"carrier":16,"routeIn":0,"resource":"x","network":"B","campaign":null,"pending":null}`),
+		"PATCH /v2.2/numbers/2015550123/messaging":        ok(`{"number":"2015550123","updated":["routeIn"]}`),
+		"PUT /v2.2/numbers/2015550123/messaging-campaign": ok(`{"number":"2015550123","campaignId":"C1","status":"enabled","carrier":19,"network":"B","upstreamCnpId":"CAMP003","previousNetwork":null,"previousNetworkCleared":false,"alreadyAssigned":false,"orderId":"229544057","warning":null,"message":null,"job":null}`),
+		"DELETE /v2.2/numbers/2015550123/messaging-campaign": func(r *http.Request) (int, string) {
+			// Spec: campaignId is a required query param.
+			if got := r.URL.Query().Get("campaignId"); got != "C1" {
+				t.Errorf("campaignId = %q", got)
+			}
+			return 200, `{"status":"success","data":{"number":"2015550123","campaignId":"C1","network":"B","upstreamCnpId":"CAMP003","unassigned":true}}`
+		},
+		"DELETE /v2.2/numbers/messaging-campaign": func(r *http.Request) (int, string) {
+			// Spec: numbers + campaignId are required query params; no body.
+			q := r.URL.Query()
+			if q.Get("numbers") != "2015550123" || q.Get("campaignId") != "C1" {
+				t.Errorf("bulk unassign query wrong: %s", r.URL.RawQuery)
+			}
+			if r.Body != nil && r.ContentLength > 0 {
+				t.Errorf("BulkUnassignCampaign must not send a body (ContentLength=%d)", r.ContentLength)
+			}
+			return 200, `{"status":"success","data":{"campaignId":"C1","network":"B","upstreamCnpId":"CAMP003","unassignedNumbers":["2015550123"],"failed":[]}}`
+		},
+		"PATCH /v2.2/numbers/2015550123/port-out-pin": ok(`{"number":"2015550123","portOutPin":"1234","changed":true}`),
 	})
 
 	if r, err := c.Numbers.List(ctx); err != nil || r.Numbers[0].Route != 4 {
@@ -412,10 +466,10 @@ func TestNumbersFullSurface(t *testing.T) {
 		// v2.2.11 added Status, AlreadyAssigned, OrderID, Warning, Message, and Job
 		t.Errorf("AssignCampaign v2.2.11 fields not decoded: %+v", r)
 	}
-	if r, err := c.Numbers.UnassignCampaign(ctx, "2015550123"); err != nil || !r.Unassigned {
+	if r, err := c.Numbers.UnassignCampaign(ctx, "2015550123", "C1"); err != nil || !r.Unassigned {
 		t.Fatalf("UnassignCampaign: %v", err)
 	}
-	if r, err := c.Numbers.BulkUnassignCampaign(ctx, []string{"2015550123"}); err != nil || r.UnassignedNumbers[0] != "2015550123" {
+	if r, err := c.Numbers.BulkUnassignCampaign(ctx, []string{"2015550123"}, "C1"); err != nil || r.UnassignedNumbers[0] != "2015550123" {
 		t.Fatalf("BulkUnassignCampaign: %v", err)
 	}
 	if r, err := c.Numbers.SetPortOutPin(ctx, "2015550123", PortOutPinUpdateRequest{PIN: "1234"}); err != nil || r.PortOutPin != "1234" {
@@ -470,7 +524,7 @@ func TestSupportFullSurface(t *testing.T) {
 	ctx := context.Background()
 	ticket := `{"id":1,"status":"active","subject":"S","number":1015}`
 	c, _ := mux(t, map[string]func(*http.Request) (int, string){
-		"GET /v2.2/support/tickets":            ok(`{"tickets":[` + ticket + `]}`),
+		"GET /v2.2/support/tickets":            ok(`{"totalCount":1,"tickets":[` + ticket + `]}`),
 		"POST /v2.2/support/tickets":           created(`{"ticket":` + ticket + `}`),
 		"GET /v2.2/support/tickets/1":          ok(`{"ticket":` + ticket + `}`),
 		"PUT /v2.2/support/tickets/1":          ok(`{"id":1,"status":"success"}`),
@@ -479,7 +533,7 @@ func TestSupportFullSurface(t *testing.T) {
 		"POST /v2.2/support/tickets/1/replies": created(`{"message":"Reply added"}`),
 	})
 
-	if r, err := c.Support.List(ctx); err != nil || r.Tickets[0].TicketNumber != 1015 {
+	if r, err := c.Support.List(ctx); err != nil || r.Tickets[0].TicketNumber != 1015 || r.TotalCount != 1 {
 		t.Fatalf("List: %v %#v", err, r)
 	}
 	if r, err := c.Support.Create(ctx, TicketCreateRequest{Subject: "s", Message: "m"}); err != nil || r.Ticket.Subject != "S" {
@@ -507,19 +561,34 @@ func TestSupportFullSurface(t *testing.T) {
 func TestINumberingFullSurface(t *testing.T) {
 	ctx := context.Background()
 	c, _ := mux(t, map[string]func(*http.Request) (int, string){
-		"GET /v2.2/inventory":                     ok(`{"numbers":[{"number":"2015550103","rateCenter":"CLOSTER","city":"Closter","province":"NJ","lata":"224"}]}`),
-		"GET /v2.2/inventory/coverage":            ok(`{"coverage":[{"count":100,"npa":"201"}]}`),
+		"GET /v2.2/inventory": func(r *http.Request) (int, string) {
+			// Spec: tnMask is required; quantity/province/rateCenter/lata optional.
+			q := r.URL.Query()
+			if q.Get("tnMask") != "201555*" || q.Get("quantity") != "10" ||
+				q.Get("province") != "NJ" || q.Get("rateCenter") != "CLOSTER" || q.Get("lata") != "224" {
+				t.Errorf("inventory query wrong: %s", r.URL.RawQuery)
+			}
+			return 200, `{"status":"success","data":{"numbers":[{"number":"2015550103","rateCenter":"CLOSTER","city":"Closter","province":"NJ","lata":"224"}]}}`
+		},
+		"GET /v2.2/inventory/coverage": func(r *http.Request) (int, string) {
+			// Spec: countBy is required; locState/city/rcAbbre/npa/lata optional.
+			q := r.URL.Query()
+			if q.Get("countBy") != "npanxx" || q.Get("locState") != "NJ" || q.Get("rcAbbre") != "CLOSTER" {
+				t.Errorf("coverage query wrong: %s", r.URL.RawQuery)
+			}
+			return 200, `{"status":"success","data":{"coverage":[{"count":100,"npa":"201"}]}}`
+		},
 		"POST /v2.2/orders":                       created(`{"orderId":"1","amountCharged":0.5,"numbersOrdered":["2015550123"],"failed":[]}`),
 		"GET /v2.2/ports":                         ok(`{"ports":[{"id":"abc","status":"Complete"}]}`),
-		"GET /v2.2/ports/42":                      ok(`{"port":{"id":"abc","status":"Complete"}}`),
+		"GET /v2.2/ports/a3a2a":                   ok(`{"port":{"id":"abc","status":"Complete"}}`),
 		"POST /v2.2/ports":                        created(`{"pid":"a3a2a","ticket":2114,"message":"ok","loaUrl":"https://x/loa","portUrl":"https://x/port"}`),
 		"GET /v2.2/ports/availability/2015550102": ok(`{"number":"2015550102","portable":true,"losingCarrier":"Sinch Voice-NSR-10X-Port/1","localRoutingNumber":"6465550105","rateCenterTier":"0","reason":null}`),
 	})
 
-	if r, err := c.INumbering.SearchInventory(ctx, InventoryQuery{State: "NJ", Limit: 10, NPA: 201, NXX: 555, RateCenter: "CLOSTER", Contains: "55", EndsWith: "00"}); err != nil || r.Numbers[0].Number != "2015550103" {
+	if r, err := c.INumbering.SearchInventory(ctx, InventoryQuery{TnMask: "201555*", Quantity: 10, Province: "NJ", RateCenter: "CLOSTER", Lata: "224"}); err != nil || r.Numbers[0].Number != "2015550103" {
 		t.Fatalf("SearchInventory: %v", err)
 	}
-	if r, err := c.INumbering.Coverage(ctx, CoverageQuery{State: "NJ", RateCenter: "CLOSTER"}); err != nil || r.Coverage[0].Count != 100 {
+	if r, err := c.INumbering.Coverage(ctx, CoverageQuery{CountBy: "npanxx", LocState: "NJ", RcAbbre: "CLOSTER"}); err != nil || r.Coverage[0].Count != 100 {
 		t.Fatalf("Coverage: %v", err)
 	}
 	body := OrderCreateRequest{Numbers: []OrderNumber{{Value: "2015550123"}, {Spec: &OrderNumberSpec{Number: "2015551235", Route: Int(4)}}}}
@@ -529,7 +598,7 @@ func TestINumberingFullSurface(t *testing.T) {
 	if r, err := c.INumbering.Ports(ctx); err != nil || r.Ports[0].ID != "abc" {
 		t.Fatalf("Ports: %v", err)
 	}
-	if r, err := c.INumbering.Port(ctx, 42); err != nil || r.Port.ID != "abc" {
+	if r, err := c.INumbering.Port(ctx, "a3a2a"); err != nil || r.Port.ID != "abc" {
 		t.Fatalf("Port: %v", err)
 	}
 	if r, err := c.INumbering.SubmitPort(ctx, PortSubmitRequest{
@@ -569,7 +638,7 @@ func TestOrderNumberMarshalJSON(t *testing.T) {
 // ---------------------------------------------------------- error helpers + repr ---
 
 func TestAPIErrorRepr(t *testing.T) {
-	e := &APIError{Kind: KindNotFound, StatusCode: 404, Code: "NF", Message: "missing"}
+	e := &APIError{Kind: KindNotFound, StatusCode: 404, Code: 404, Message: "missing"}
 	if !strings.Contains(e.Error(), "404") || !strings.Contains(e.Error(), "missing") {
 		t.Errorf("Error() = %q", e.Error())
 	}

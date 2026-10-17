@@ -8,8 +8,9 @@ import (
 
 // AccountService groups every operation under the Account tag.
 //
-// Note: cdr, recurring_charges, payments, registration, and Client.Login share
-// a 6 req/hour/IP rate limit. Bursting will trigger 429s.
+// Note: Get, CDR, RecurringCharges, and Client.Login (POST
+// /v2.2/account/api-key) share a 6 req/hour/IP rate limit. Bursting will
+// trigger 429s.
 type AccountService struct{ c *Client }
 
 // AccountRates carries the per-service rates exposed on an account.
@@ -126,17 +127,16 @@ type AccountMrcData struct {
 
 // AccountRegistrationData is the response data for GET /v2.2/account/registration.
 type AccountRegistrationData struct {
-	Agent   string `json:"agent,omitempty"`
-	URI     string `json:"uri,omitempty"`
-	Expires int    `json:"expires,omitempty"`
+	Agent string `json:"agent,omitempty"`
+	URI   string `json:"uri,omitempty"`
 }
 
 // AccountAddRequest is the body for POST /v2.2/account (admin-only sub-account creation).
 type AccountAddRequest struct {
-	Username      int    `json:"username"`
-	Name          string `json:"name"`
-	Email         string `json:"email"`
-	MasterAccount *int   `json:"masterAccount,omitempty"`
+	Username      string  `json:"username"` // 10-digit numeric username
+	Name          string  `json:"name"`
+	Email         string  `json:"email"`
+	MasterAccount *string `json:"masterAccount,omitempty"` // billing account; defaults to Username
 }
 
 // AccountAddData is the response data for POST /v2.2/account.
@@ -230,10 +230,11 @@ func (s *AccountService) Add(ctx context.Context, body AccountAddRequest) (*Acco
 	return &out, nil
 }
 
-// Signup is the public sign-up flow: POST /v2.2/accounts.
+// Signup is the public sign-up flow: POST /v2.2/accounts. No bearer token is
+// required or accepted.
 func (s *AccountService) Signup(ctx context.Context, body AccountSignupRequest) (*AccountSignupData, error) {
 	var out AccountSignupData
-	err := s.c.t.request(ctx, "POST", "/v2.2/accounts", nil, body, &out, true)
+	err := s.c.t.request(ctx, "POST", "/v2.2/accounts", nil, body, &out, false)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +242,8 @@ func (s *AccountService) Signup(ctx context.Context, body AccountSignupRequest) 
 }
 
 // CDR fetches call detail records in the [Start, End] Unix-seconds range.
-// Rate-limited: 6 req/hour/IP shared with mrc/payments/registration/api-key.
+// Rate-limited: 6 req/hour/IP shared with Get, RecurringCharges, and the
+// api-key exchange (Client.Login).
 func (s *AccountService) CDR(ctx context.Context, start, end int) (*AccountCdrData, error) {
 	q := url.Values{}
 	if start != 0 {
@@ -258,17 +260,23 @@ func (s *AccountService) CDR(ctx context.Context, start, end int) (*AccountCdrDa
 	return &out, nil
 }
 
-// Credits returns the full credit history, newest first.
-func (s *AccountService) Credits(ctx context.Context) (*AccountCreditsData, error) {
+// Credits returns the credit history, newest first. Pass status "paid" or
+// "unpaid" to filter; "" returns everything.
+func (s *AccountService) Credits(ctx context.Context, status string) (*AccountCreditsData, error) {
+	q := url.Values{}
+	if status != "" {
+		q.Set("status", status)
+	}
 	var out AccountCreditsData
-	err := s.c.t.request(ctx, "GET", "/v2.2/account/credits", nil, nil, &out, true)
+	err := s.c.t.request(ctx, "GET", "/v2.2/account/credits", q, nil, &out, true)
 	if err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// RecurringCharges returns active monthly-recurring charges. Rate-limited.
+// RecurringCharges returns active monthly-recurring charges. Rate-limited:
+// 6 req/hour/IP shared with Get, CDR, and the api-key exchange (Client.Login).
 func (s *AccountService) RecurringCharges(ctx context.Context) (*AccountMrcData, error) {
 	var out AccountMrcData
 	err := s.c.t.request(ctx, "GET", "/v2.2/account/recurring-charges", nil, nil, &out, true)
@@ -278,7 +286,7 @@ func (s *AccountService) RecurringCharges(ctx context.Context) (*AccountMrcData,
 	return &out, nil
 }
 
-// Payments returns the full payment history, newest first. Rate-limited.
+// Payments returns the full payment history, newest first.
 func (s *AccountService) Payments(ctx context.Context) (*AccountPaymentsData, error) {
 	var out AccountPaymentsData
 	err := s.c.t.request(ctx, "GET", "/v2.2/account/payments", nil, nil, &out, true)
@@ -288,7 +296,7 @@ func (s *AccountService) Payments(ctx context.Context) (*AccountPaymentsData, er
 	return &out, nil
 }
 
-// Registration returns the current SIP registration. Rate-limited.
+// Registration returns the current SIP registration.
 func (s *AccountService) Registration(ctx context.Context) (*AccountRegistrationData, error) {
 	var out AccountRegistrationData
 	err := s.c.t.request(ctx, "GET", "/v2.2/account/registration", nil, nil, &out, true)

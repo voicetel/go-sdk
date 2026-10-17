@@ -11,15 +11,14 @@
 //
 // Strict rules in this file:
 //   - No state mutations. No POST/PUT/PATCH/DELETE.
-//   - Login + account/registration + account/cdr + account/recurring-charges + account/payments
-//     all share a 6/hr/IP rate limit. Run sparingly.
+//   - Login + account + account/cdr + account/recurring-charges share a
+//     6/hr/IP rate limit. Run sparingly.
 
 package voicetel
 
 import (
 	"context"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 )
@@ -36,15 +35,10 @@ func integrationClient(t *testing.T) *Client {
 		base = DefaultBaseURL
 	}
 
-	uid, err := strconv.Atoi(user)
-	if err != nil {
-		t.Fatalf("VOICETEL_USERNAME must be numeric: %v", err)
-	}
-
 	c := NewClient(WithBaseURL(base), WithTimeout(30*time.Second))
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if _, err := c.Login(ctx, uid, pass); err != nil {
+	if _, err := c.Login(ctx, user, pass); err != nil {
 		t.Fatalf("Login: %v", err)
 	}
 	return c
@@ -74,12 +68,11 @@ func TestIntegrationReadOnlyLists(t *testing.T) {
 		"E911.List":     func() error { _, err := c.E911.List(ctx); return err },
 		"Support.List":  func() error { _, err := c.Support.List(ctx); return err },
 		"INumbering.Coverage": func() error {
-			_, err := c.INumbering.Coverage(ctx, CoverageQuery{})
+			_, err := c.INumbering.Coverage(ctx, CoverageQuery{CountBy: "state"})
 			return err
 		},
-		"INumbering.Ports":         func() error { _, err := c.INumbering.Ports(ctx); return err },
-		"Authentication.Get":       func() error { _, err := c.Authentication.Get(ctx); return err },
-		"Messaging.CampaignStatus": func() error { _, err := c.Messaging.CampaignStatus(ctx); return err },
+		"INumbering.Ports":   func() error { _, err := c.INumbering.Ports(ctx); return err },
+		"Authentication.Get": func() error { _, err := c.Authentication.Get(ctx); return err },
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := fn(); err != nil {

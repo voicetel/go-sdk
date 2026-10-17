@@ -14,7 +14,7 @@ import (
 func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(500)
-		_, _ = w.Write([]byte(`{"code":"X","message":"server is angry"}`))
+		_, _ = w.Write([]byte(`{"status":"error","error":{"code":500,"message":"server is angry"}}`))
 	}))
 	defer srv.Close()
 	c := NewClient(WithBaseURL(srv.URL), WithAPIKey("k"), WithMaxRetries(0))
@@ -36,13 +36,13 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	assertErr(t, "Account.Get", err)
 	_, err = c.Account.Update(ctx, AccountPutRequest{Timezone: String("UTC")})
 	assertErr(t, "Account.Update", err)
-	_, err = c.Account.Add(ctx, AccountAddRequest{Username: 1, Name: "x", Email: "x@y.com"})
+	_, err = c.Account.Add(ctx, AccountAddRequest{Username: "1", Name: "x", Email: "x@y.com"})
 	assertErr(t, "Account.Add", err)
 	_, err = c.Account.Signup(ctx, AccountSignupRequest{Name: "x", Email: "x@y.com"})
 	assertErr(t, "Account.Signup", err)
 	_, err = c.Account.CDR(ctx, 1, 2)
 	assertErr(t, "Account.CDR", err)
-	_, err = c.Account.Credits(ctx)
+	_, err = c.Account.Credits(ctx, "")
 	assertErr(t, "Account.Credits", err)
 	_, err = c.Account.RecurringCharges(ctx)
 	assertErr(t, "Account.RecurringCharges", err)
@@ -58,7 +58,7 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	assertErr(t, "ACL.List", err)
 	_, err = c.ACL.Add(ctx, AclModifyRequest{ACL: []CidrEntry{{CIDR: "203.0.113.0/24"}}})
 	assertErr(t, "ACL.Add", err)
-	_, err = c.ACL.Remove(ctx, AclModifyRequest{ACL: []CidrEntry{{CIDR: "203.0.113.0/24"}}})
+	_, err = c.ACL.Remove(ctx, []string{"203.0.113.0/24"})
 	assertErr(t, "ACL.Remove", err)
 
 	// Authentication
@@ -104,13 +104,13 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	assertErr(t, "Lookups.LRN", err)
 
 	// Messaging
-	_, err = c.Messaging.History(ctx, HistoryOptions{})
+	_, err = c.Messaging.History(ctx, HistoryOptions{Number: "2015550100"})
 	assertErr(t, "Messaging.History", err)
 	_, err = c.Messaging.Send(ctx, MessageSendRequest{FromNumber: "2015550100", ToNumber: "2015550123", Text: "hi"})
 	assertErr(t, "Messaging.Send", err)
 	_, err = c.Messaging.CreateBrand(ctx, MessagingBrandCreateRequest{MessagingBrandID: "BABC", MessagingBrandName: "X"})
 	assertErr(t, "Messaging.CreateBrand", err)
-	_, err = c.Messaging.CampaignStatus(ctx)
+	_, err = c.Messaging.CampaignStatus(ctx, []string{"C1"})
 	assertErr(t, "Messaging.CampaignStatus", err)
 	_, err = c.Messaging.CreateCampaign(ctx, MessagingCampaignCreateRequest{MessagingBrandID: "B", ExternalCampaignID: "C", CampaignDescription: "d"})
 	assertErr(t, "Messaging.CreateCampaign", err)
@@ -175,9 +175,9 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	assertErr(t, "Numbers.PatchMessaging", err)
 	_, err = c.Numbers.AssignCampaign(ctx, "2015550123", NumberCampaignAssignRequest{CampaignID: "C1"})
 	assertErr(t, "Numbers.AssignCampaign", err)
-	_, err = c.Numbers.UnassignCampaign(ctx, "2015550123")
+	_, err = c.Numbers.UnassignCampaign(ctx, "2015550123", "C1")
 	assertErr(t, "Numbers.UnassignCampaign", err)
-	_, err = c.Numbers.BulkUnassignCampaign(ctx, []string{"2015550123"})
+	_, err = c.Numbers.BulkUnassignCampaign(ctx, []string{"2015550123"}, "C1")
 	assertErr(t, "Numbers.BulkUnassignCampaign", err)
 	_, err = c.Numbers.SetPortOutPin(ctx, "2015550123", PortOutPinUpdateRequest{PIN: "1234"})
 	assertErr(t, "Numbers.SetPortOutPin", err)
@@ -200,15 +200,15 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	assertErr(t, "Support.Reply", err)
 
 	// iNumbering
-	_, err = c.INumbering.SearchInventory(ctx, InventoryQuery{State: "NJ"})
+	_, err = c.INumbering.SearchInventory(ctx, InventoryQuery{TnMask: "201555*"})
 	assertErr(t, "INumbering.SearchInventory", err)
-	_, err = c.INumbering.Coverage(ctx, CoverageQuery{State: "NJ"})
+	_, err = c.INumbering.Coverage(ctx, CoverageQuery{CountBy: "state", LocState: "NJ"})
 	assertErr(t, "INumbering.Coverage", err)
 	_, err = c.INumbering.Order(ctx, OrderCreateRequest{Numbers: []OrderNumber{{Value: "2015550123"}}})
 	assertErr(t, "INumbering.Order", err)
 	_, err = c.INumbering.Ports(ctx)
 	assertErr(t, "INumbering.Ports", err)
-	_, err = c.INumbering.Port(ctx, 42)
+	_, err = c.INumbering.Port(ctx, "a3a2a")
 	assertErr(t, "INumbering.Port", err)
 	_, err = c.INumbering.SubmitPort(ctx, PortSubmitRequest{
 		DID: []string{"2015550123"}, Name: "X", NameType: "business",
@@ -228,7 +228,7 @@ func TestLoginPropagatesEndpointError(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(WithBaseURL(srv.URL), WithMaxRetries(0))
-	_, err := c.Login(context.Background(), 1, "p")
+	_, err := c.Login(context.Background(), "1", "p")
 	if !IsRateLimit(err) {
 		t.Fatalf("expected KindRateLimit, got %v", err)
 	}
