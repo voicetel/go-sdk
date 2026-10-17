@@ -2,7 +2,7 @@
 
 The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api/v2.2/) — provision numbers, place orders, validate e911, send messages, and manage your account, all with strongly-typed, context-aware Go.
 
-![Version](https://img.shields.io/badge/version-2.2.16-blue)
+![Version](https://img.shields.io/badge/version-2.2.17-blue)
 ![Go](https://img.shields.io/badge/go-1.22%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
@@ -67,7 +67,7 @@ The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api
 go get github.com/voicetel/go-sdk/v2
 ```
 
-Requires Go 1.22 or later. The module path carries the `/v2` major-version suffix, so release tags resolve with `go get github.com/voicetel/go-sdk/v2@v2.2.16`.
+Requires Go 1.22 or later. The module path carries the `/v2` major-version suffix, so release tags resolve with `go get github.com/voicetel/go-sdk/v2@v2.2.17`.
 
 ## 🏁 Quickstart
 

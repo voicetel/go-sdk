@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.17 — 2026-10-17
+
+Same code as 2.2.16. Re-issued after a repository history purge removed
+real-looking example data (phone numbers, campaign/brand IDs, personal
+name/addresses) from all commits. v2.2.16 is retracted — use v2.2.17.
+
 ## 2.2.16 — 2026-10-17
 
 Spec-conformance release tracking VoiceTel API spec v2.2.16. **Contains breaking changes** — request shapes now match the documented wire format.
