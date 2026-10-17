@@ -10,16 +10,38 @@ import (
 // owned by the account.
 type NumbersService struct{ c *Client }
 
+// -------------------------------------------------------------- route type ---
+
+// RouteType is a DID-level global route type — the domain of every DID-level
+// route field on the numbers resource (NumberAddRequest.Route,
+// NumberDetail.Route, NumberRouteRequest.Route, ...). It is distinct from
+// gateway ids, which identify specific gateways (see GatewaysService).
+type RouteType int
+
+// Global route types for DID-level route fields. 7 is not assigned.
+const (
+	RouteUser        = 1 // USER
+	RouteT30         = 2 // T30
+	RouteVoiceBridge = 3 // VOICE_BRIDGE
+	RouteDID         = 4 // DID (default)
+	RouteT38         = 5 // T38
+	RouteVoiceML     = 6 // VOICEML
+	RouteSDN         = 8 // SDN
+	RouteMobile      = 9 // MOBILE
+)
+
 // ---------------------------------------------------------------- requests ---
 
 // NumberAddRequest is the body for POST /v2.2/numbers.
 type NumberAddRequest struct {
 	Number string `json:"number"`
-	Route  *int   `json:"route,omitempty"` // gateway route ID; defaults to 4 (DID)
+	Route  *int   `json:"route,omitempty"` // global route type (see RouteType); defaults to 4 (DID)
 }
 
 // NumberRouteRequest is the body for PUT /v2.2/numbers/{number}/route.
 type NumberRouteRequest struct {
+	// Route is the global route type to apply: 1 USER, 2 T30, 3 VOICE_BRIDGE,
+	// 4 DID (default), 5 T38, 6 VOICEML, 8 SDN, or 9 MOBILE (7 is not assigned).
 	Route int `json:"route"`
 }
 
@@ -74,7 +96,7 @@ type NumberCampaignAssignRequest struct {
 // NumberMoveRequest is the body for PATCH /v2.2/numbers/{number}.
 type NumberMoveRequest struct {
 	AccountID int `json:"accountId"` // destination account id
-	Route     int `json:"route"`
+	Route     int `json:"route"`     // gateway id the number is currently routed to (not a RouteType)
 }
 
 // PortOutPinUpdateRequest is the body for PATCH /v2.2/numbers/{number}/port-out-pin.
@@ -89,7 +111,7 @@ type PortOutPinUpdateRequest struct {
 type NumberDetail struct {
 	Number     string  `json:"number"`
 	Translated string  `json:"translated"`
-	Route      int     `json:"route"`
+	Route      int     `json:"route"` // global route type (see RouteType)
 	Gateway    *string `json:"gateway"`
 	CNAM       bool    `json:"cnam"`
 	Forward    bool    `json:"forward"`
@@ -134,7 +156,7 @@ type NumberMessagingState struct {
 // NumberAddData is the response data for POST /v2.2/numbers.
 type NumberAddData struct {
 	Number string `json:"number"`
-	Route  int    `json:"route"`
+	Route  int    `json:"route"` // global route type (see RouteType)
 }
 
 // NumberCnamData is the response data for PUT /v2.2/numbers/{number}/cnam.
@@ -174,13 +196,13 @@ type NumberMessagingPatchData struct {
 type NumberMoveData struct {
 	Number    string `json:"number"`
 	AccountID int    `json:"accountId"`
-	Route     int    `json:"route"`
+	Route     int    `json:"route"` // global route type on the destination account (see RouteType)
 }
 
 // NumberRouteData is the response data for PUT /v2.2/numbers/{number}/route.
 type NumberRouteData struct {
 	Number string `json:"number"`
-	Route  int    `json:"route"`
+	Route  int    `json:"route"` // echo of the applied global route type (see RouteType)
 }
 
 // NumberSmsData is the response data for GET/PUT /v2.2/numbers/{number}/sms.
@@ -312,7 +334,9 @@ func (s *NumbersService) Release(ctx context.Context, number string) error {
 	return s.c.t.request(ctx, "POST", "/v2.2/numbers/"+url.PathEscape(number)+"/release", nil, nil, nil, true)
 }
 
-// SetRoute updates a TN's outbound route.
+// SetRoute updates a TN's route. Body.Route is a global route type:
+// 1 USER, 2 T30, 3 VOICE_BRIDGE, 4 DID (default), 5 T38, 6 VOICEML,
+// 8 SDN, or 9 MOBILE (7 is not assigned).
 func (s *NumbersService) SetRoute(ctx context.Context, number string, body NumberRouteRequest) (*NumberRouteData, error) {
 	var out NumberRouteData
 	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/route", nil, body, &out, true); err != nil {

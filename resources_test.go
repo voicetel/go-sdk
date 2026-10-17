@@ -364,7 +364,7 @@ func TestNumbersFullSurface(t *testing.T) {
 		"DELETE /v2.2/numbers/2015550123":                 noContent,
 		"PATCH /v2.2/numbers/2015550123":                  ok(`{"number":"2015550123","accountId":99,"route":4}`),
 		"POST /v2.2/numbers/2015550123/release":           noContent,
-		"PUT /v2.2/numbers/2015550123/route":              ok(`{"number":"2015550123","route":7}`),
+		"PUT /v2.2/numbers/2015550123/route":              ok(`{"number":"2015550123","route":4}`),
 		"PUT /v2.2/numbers/2015550123/translation":        ok(`{"number":"2015550123","translation":"2015551235"}`),
 		"PUT /v2.2/numbers/2015550123/cnam":               ok(`{"number":"2015550123","cnam":true}`),
 		"PUT /v2.2/numbers/2015550123/lidb":               ok(`{"number":"2015550123","cnam":"ACME","customerOrderReference":"r1","carrierStatus":"Success"}`),
@@ -418,7 +418,7 @@ func TestNumbersFullSurface(t *testing.T) {
 	if err := c.Numbers.Release(ctx, "2015550123"); err != nil {
 		t.Fatalf("Release: %v", err)
 	}
-	if r, err := c.Numbers.SetRoute(ctx, "2015550123", NumberRouteRequest{Route: 7}); err != nil || r.Route != 7 {
+	if r, err := c.Numbers.SetRoute(ctx, "2015550123", NumberRouteRequest{Route: 4}); err != nil || r.Route != 4 {
 		t.Fatalf("SetRoute: %v", err)
 	}
 	if r, err := c.Numbers.SetTranslation(ctx, "2015550123", NumberTranslationRequest{Translation: "2015551235"}); err != nil || r.Translation != "2015551235" {

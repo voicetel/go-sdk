@@ -142,7 +142,7 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	if err := c.Numbers.Release(ctx, "2015550123"); err == nil {
 		t.Error("Numbers.Release expected error")
 	}
-	_, err = c.Numbers.SetRoute(ctx, "2015550123", NumberRouteRequest{Route: 7})
+	_, err = c.Numbers.SetRoute(ctx, "2015550123", NumberRouteRequest{Route: 4})
 	assertErr(t, "Numbers.SetRoute", err)
 	_, err = c.Numbers.SetTranslation(ctx, "2015550123", NumberTranslationRequest{Translation: "2015551235"})
 	assertErr(t, "Numbers.SetTranslation", err)
