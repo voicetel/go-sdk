@@ -21,6 +21,7 @@ type Client struct {
 	ACL            *ACLService
 	Authentication *AuthenticationService
 	E911           *E911Service
+	Fax            *FaxService
 	Gateways       *GatewaysService
 	INumbering     *INumberingService
 	Lookups        *LookupsService
@@ -105,6 +106,7 @@ func NewClient(opts ...Option) *Client {
 	c.ACL = &ACLService{c: c}
 	c.Authentication = &AuthenticationService{c: c}
 	c.E911 = &E911Service{c: c}
+	c.Fax = &FaxService{c}
 	c.Gateways = &GatewaysService{c: c}
 	c.INumbering = &INumberingService{c: c}
 	c.Lookups = &LookupsService{c: c}

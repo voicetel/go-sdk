@@ -58,7 +58,7 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	assertErr(t, "ACL.List", err)
 	_, err = c.ACL.Add(ctx, AclModifyRequest{ACL: []CidrEntry{{CIDR: "203.0.113.0/24"}}})
 	assertErr(t, "ACL.Add", err)
-	_, err = c.ACL.Remove(ctx, []string{"203.0.113.0/24"})
+	_, err = c.ACL.Remove(ctx, AclModifyRequest{ACL: []CidrEntry{{CIDR: "203.0.113.0/24"}}})
 	assertErr(t, "ACL.Remove", err)
 
 	// Authentication

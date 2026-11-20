@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.2.21 — 2026-11-20
+
+Spec v2.2.21 sync — full audit against the live server code, plus the new Fax API.
+
+### Breaking
+- **`ACLService.Remove` now takes an `AclModifyRequest`** (the same `{acl: [{cidr}]}` body as `Add`). The old `cidrs` query parameter is not read by the live API (v2.2.0 handler rewrite) — requests using it silently removed nothing.
+
+### Added
+- **Fax API** (`Client.Fax`): `ListNumbers`, `Send` (multipart, 201, queued; idempotent per Idempotency-Key — pass your own UUID to make retries safe across restarts), `History` (cursor paging, status filter), `Get` (job with timestamps, attempts, failureReason) and `Document` (the PDF as raw bytes).
+- Transport: multipart requests (`requestMultipart`), raw-bytes responses (`requestRaw`).
+
 ## 2.2.20 — 2026-11-20
 
 Spec v2.2.20 sync. Adds the four new operations and tracks the truth fixes from spec v2.2.18–v2.2.20.

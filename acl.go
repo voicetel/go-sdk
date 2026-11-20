@@ -2,8 +2,6 @@ package voicetel
 
 import (
 	"context"
-	"net/url"
-	"strings"
 )
 
 // ACLService manages the IP allowlist (CIDR entries) bound to the account.
@@ -68,12 +66,12 @@ func (s *ACLService) Add(ctx context.Context, body AclModifyRequest) (*AclAddDat
 	return &out, nil
 }
 
-// Remove removes one or more CIDR entries from the allowlist.
-func (s *ACLService) Remove(ctx context.Context, cidrs []string) (*AclRemoveData, error) {
-	q := url.Values{}
-	q.Set("cidrs", strings.Join(cidrs, ","))
+// Remove removes one or more CIDR entries from the allowlist. Since the
+// v2.2.0 handler rewrite it takes the same {acl: [...]} body as Add — the old
+// cidrs query parameter is not read by the API.
+func (s *ACLService) Remove(ctx context.Context, body AclModifyRequest) (*AclRemoveData, error) {
 	var out AclRemoveData
-	if err := s.c.t.request(ctx, "DELETE", "/v2.2/acl", q, nil, &out, true); err != nil {
+	if err := s.c.t.request(ctx, "DELETE", "/v2.2/acl", nil, body, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil

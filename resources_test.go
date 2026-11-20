@@ -3,6 +3,7 @@ package voicetel
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -113,12 +114,15 @@ func TestACLFullSurface(t *testing.T) {
 		"GET /v2.2/acl":  ok(`{"acl":[{"cidr":"203.0.113.0/24"}]}`),
 		"POST /v2.2/acl": ok(`{"added":[{"cidr":"203.0.113.0/24"}]}`),
 		"DELETE /v2.2/acl": func(r *http.Request) (int, string) {
-			// Spec: DELETE /v2.2/acl takes a required cidrs query param, no body.
-			if got := r.URL.Query().Get("cidrs"); got != "203.0.113.0/24,203.0.113.1/32" {
-				t.Errorf("cidrs = %q", got)
+			// v2.2.21: DELETE /v2.2/acl takes the same {acl: [...]} body as POST — no query params.
+			if got := r.URL.RawQuery; got != "" {
+				t.Errorf("Remove must not send query params, got %q", got)
 			}
-			if r.Body != nil && r.ContentLength > 0 {
-				t.Errorf("Remove must not send a body (ContentLength=%d)", r.ContentLength)
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			entries, _ := body["acl"].([]any)
+			if len(entries) != 2 {
+				t.Errorf("Remove body acl = %v, want 2 entries", body)
 			}
 			return 200, `{"status":"success","data":{"removed":[{"cidr":"203.0.113.0/24"}]}}`
 		},
@@ -130,7 +134,7 @@ func TestACLFullSurface(t *testing.T) {
 	if r, err := c.ACL.Add(ctx, body); err != nil || r.Added[0].CIDR != "203.0.113.0/24" {
 		t.Fatalf("Add: %v", err)
 	}
-	if r, err := c.ACL.Remove(ctx, []string{"203.0.113.0/24", "203.0.113.1/32"}); err != nil || r.Removed[0].CIDR != "203.0.113.0/24" {
+	if r, err := c.ACL.Remove(ctx, AclModifyRequest{ACL: []CidrEntry{{CIDR: "203.0.113.0/24"}, {CIDR: "203.0.113.1/32"}}}); err != nil || r.Removed[0].CIDR != "203.0.113.0/24" {
 		t.Fatalf("Remove: %v", err)
 	}
 }
@@ -745,5 +749,66 @@ func TestV220OrdersRoutesAndMMSSend(t *testing.T) {
 		MediaURLs: []string{"https://example.com/photo.jpg"},
 	}); err != nil || r.ID != "m-1" {
 		t.Fatalf("media-only MMS send: %v %+v", err, r)
+	}
+}
+
+// ------------------------------------------------------------ v2.2.21 fax ---
+
+func TestV221Fax(t *testing.T) {
+	ctx := context.Background()
+	job := `{"id":"9f8c2b41a","fromNumber":"2015550123","toNumber":"2125550123","clientToken":"123e4567-e89b-12d3-a456-426614174000",` +
+		`"status":"sent","submittedAt":"2026-11-20T15:04:05Z","startedAt":"2026-11-20T15:04:41Z","completedAt":"2026-11-20T15:05:19Z",` +
+		`"attempts":1,"failureReason":null,"documents":[{"name":"contract.pdf","size":123456,"contentType":"application/pdf"}],` +
+		`"documentAvailable":true,"documentName":"contract.pdf","documentSize":123456}`
+	c, _ := mux(t, map[string]func(*http.Request) (int, string){
+		"GET /v2.2/numbers/fax": ok(`{"numbers":[{"number":"2015550123","destinationId":7,"email":"fax@example.com"}]}`),
+		"POST /v2.2/faxes": func(r *http.Request) (int, string) {
+			ct := r.Header.Get("Content-Type")
+			if !strings.HasPrefix(ct, "multipart/form-data; boundary=") {
+				t.Errorf("send content-type = %q", ct)
+			}
+			if key := r.Header.Get("Idempotency-Key"); key != "123e4567-e89b-12d3-a456-426614174000" {
+				t.Errorf("Idempotency-Key = %q", key)
+			}
+			raw, _ := io.ReadAll(r.Body)
+			s := string(raw)
+			for _, want := range []string{`name="fromNumber"`, "2015550123", `name="toNumber"`, "2125550123", `filename="contract.pdf"`, "%PDF-1.4"} {
+				if !strings.Contains(s, want) {
+					t.Errorf("multipart body missing %q", want)
+				}
+			}
+			return 201, `{"status":"success","data":{"id":"9f8c2b41a","fromNumber":"2015550123","toNumber":"2125550123","status":"queued",` +
+				`"documents":[{"name":"contract.pdf","size":123456,"contentType":"application/pdf"}]}}`
+		},
+		"GET /v2.2/faxes": func(r *http.Request) (int, string) {
+			q := r.URL.Query()
+			if q.Get("number") != "2015550123" || q.Get("from") != "1795100000" || q.Get("limit") != "50" || q.Get("status") != "all" {
+				t.Errorf("history query wrong: %s", r.URL.RawQuery)
+			}
+			return 200, `{"status":"success","data":{"number":"2015550123","fromTs":1795100000,"toTs":1795013600,"faxes":[` + job + `],"nextCursor":null}}`
+		},
+		"GET /v2.2/faxes/9f8c2b41a":          ok(job),
+		"GET /v2.2/faxes/9f8c2b41a/document": func(*http.Request) (int, string) { return 200, "%PDF-1.4 binary" },
+	})
+	if r, err := c.Fax.ListNumbers(ctx); err != nil || r.Numbers[0].DestinationID != 7 {
+		t.Fatalf("Fax.ListNumbers: %v %+v", err, r)
+	}
+	sent, err := c.Fax.Send(ctx, "2015550123", "2125550123",
+		[]FaxDocumentFile{{Name: "contract.pdf", ContentType: "application/pdf", Content: []byte("%PDF-1.4")}},
+		"123e4567-e89b-12d3-a456-426614174000")
+	if err != nil || sent.Status != FaxQueued || sent.Documents[0].Size != 123456 {
+		t.Fatalf("Fax.Send: %v %+v", err, sent)
+	}
+	h, err := c.Fax.History(ctx, "2015550123", &FaxHistoryOptions{FromTs: 1795100000, Limit: 50, Status: "all"})
+	if err != nil || len(h.Faxes) != 1 || h.Faxes[0].Status != FaxSent || h.Faxes[0].Attempts == nil || *h.Faxes[0].Attempts != 1 {
+		t.Fatalf("Fax.History: %v %+v", err, h)
+	}
+	j, err := c.Fax.Get(ctx, "9f8c2b41a")
+	if err != nil || !j.DocumentAvailable || j.DocumentSize == nil || *j.DocumentSize != 123456 {
+		t.Fatalf("Fax.Get: %v %+v", err, j)
+	}
+	doc, err := c.Fax.Document(ctx, "9f8c2b41a")
+	if err != nil || string(doc) != "%PDF-1.4 binary" {
+		t.Fatalf("Fax.Document: %v %q", err, doc)
 	}
 }

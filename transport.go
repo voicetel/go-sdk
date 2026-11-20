@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"time"
@@ -245,4 +247,168 @@ func sleep(ctx context.Context, d time.Duration) error {
 	case <-t.C:
 		return nil
 	}
+}
+
+// MultipartFile is one file part of a multipart request.
+type MultipartFile struct {
+	Field       string // form field name (may repeat)
+	Name        string // file name
+	ContentType string
+	Content     []byte
+}
+
+// requestMultipart sends a multipart/form-data request (e.g. fax send).
+// idempotencyKey may be empty, in which case a random UUID-shaped key is set.
+func (t *transport) requestMultipart(
+	ctx context.Context,
+	method, path string,
+	fields map[string]string,
+	files []MultipartFile,
+	out any,
+	idempotencyKey string,
+) error {
+	if t.apiKey == "" {
+		return &APIError{
+			Kind:    KindAuthentication,
+			Message: "no api key set; call client.Login or pass WithAPIKey to NewClient",
+		}
+	}
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+	for k, v := range fields {
+		_ = w.WriteField(k, v)
+	}
+	for _, f := range files {
+		h := make(textproto.MIMEHeader)
+		h.Set("Content-Disposition",
+			fmt.Sprintf(`form-data; name="%s"; filename="%s"`, f.Field, f.Name))
+		if f.ContentType != "" {
+			h.Set("Content-Type", f.ContentType)
+		}
+		fw, err := w.CreatePart(h)
+		if err != nil {
+			return &APIError{Message: "build multipart body", cause: err}
+		}
+		if _, err := fw.Write(f.Content); err != nil {
+			return &APIError{Message: "build multipart body", cause: err}
+		}
+	}
+	if err := w.Close(); err != nil {
+		return &APIError{Message: "close multipart body", cause: err}
+	}
+
+	if idempotencyKey == "" {
+		bb := make([]byte, 16)
+		_, _ = rand.Read(bb)
+		idempotencyKey = fmt.Sprintf("%s-%s-%s-%s-%s",
+			hex.EncodeToString(bb[0:4]), hex.EncodeToString(bb[4:6]), hex.EncodeToString(bb[6:8]),
+			hex.EncodeToString(bb[8:10]), hex.EncodeToString(bb[10:16]))
+	}
+
+	var lastErr error
+	for attempt := 0; attempt <= t.maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, method, t.baseURL+path, bytes.NewReader(b.Bytes()))
+		if err != nil {
+			return &APIError{Message: "build request", cause: err}
+		}
+		req.Header.Set("User-Agent", t.userAgent)
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", w.FormDataContentType())
+		req.Header.Set("Authorization", "Bearer "+t.apiKey)
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+
+		resp, err := t.httpClient.Do(req)
+		if err != nil {
+			lastErr = err
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return &APIError{Message: "context cancelled before response", cause: err}
+			}
+			if attempt >= t.maxRetries {
+				return &APIError{
+					Message: fmt.Sprintf("transport error after %d attempt(s): %v", attempt+1, err),
+					cause:   err,
+				}
+			}
+			if waitErr := sleep(ctx, backoffDelay(attempt, nil)); waitErr != nil {
+				return &APIError{Message: "context cancelled during backoff", cause: waitErr}
+			}
+			continue
+		}
+		if _, retry := retryableStatuses[resp.StatusCode]; retry && attempt < t.maxRetries {
+			delay := backoffDelay(attempt, resp)
+			_ = resp.Body.Close()
+			if waitErr := sleep(ctx, delay); waitErr != nil {
+				return &APIError{Message: "context cancelled during backoff", cause: waitErr}
+			}
+			continue
+		}
+		return decode(resp, out)
+	}
+	return &APIError{Message: "retry loop exhausted", cause: lastErr}
+}
+
+// requestRaw performs a request whose response is binary (e.g. a PDF download)
+// and returns the raw bytes.
+func (t *transport) requestRaw(
+	ctx context.Context,
+	method, path string,
+	query url.Values,
+	requireAuth bool,
+) ([]byte, error) {
+	if requireAuth && t.apiKey == "" {
+		return nil, &APIError{
+			Kind:    KindAuthentication,
+			Message: "no api key set; call client.Login or pass WithAPIKey to NewClient",
+		}
+	}
+	target := t.baseURL + path
+	if len(query) > 0 {
+		target += "?" + query.Encode()
+	}
+	var lastErr error
+	for attempt := 0; attempt <= t.maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, method, target, nil)
+		if err != nil {
+			return nil, &APIError{Message: "build request", cause: err}
+		}
+		req.Header.Set("User-Agent", t.userAgent)
+		req.Header.Set("Accept", "application/octet-stream, application/json")
+		if requireAuth {
+			req.Header.Set("Authorization", "Bearer "+t.apiKey)
+		}
+		resp, err := t.httpClient.Do(req)
+		if err != nil {
+			lastErr = err
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, &APIError{Message: "context cancelled before response", cause: err}
+			}
+			if attempt >= t.maxRetries {
+				return nil, &APIError{
+					Message: fmt.Sprintf("transport error after %d attempt(s): %v", attempt+1, err),
+					cause:   err,
+				}
+			}
+			if waitErr := sleep(ctx, backoffDelay(attempt, nil)); waitErr != nil {
+				return nil, &APIError{Message: "context cancelled during backoff", cause: waitErr}
+			}
+			continue
+		}
+		raw, derr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if derr != nil {
+			return nil, &APIError{StatusCode: resp.StatusCode, Message: "read response body", cause: derr}
+		}
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return raw, nil
+		}
+		if _, retry := retryableStatuses[resp.StatusCode]; retry && attempt < t.maxRetries {
+			if waitErr := sleep(ctx, backoffDelay(attempt, resp)); waitErr != nil {
+				return nil, &APIError{Message: "context cancelled during backoff", cause: waitErr}
+			}
+			continue
+		}
+		// Reuse the JSON error envelope by funnelling the bytes through decode.
+		return nil, decode(&http.Response{StatusCode: resp.StatusCode, Body: io.NopCloser(bytes.NewReader(raw))}, nil)
+	}
+	return nil, &APIError{Message: "retry loop exhausted", cause: lastErr}
 }
