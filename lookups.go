@@ -52,10 +52,11 @@ type LrnData struct {
 }
 
 // LrnLookupData is the response data for GET /v2.2/lrn/{number}/{ani}.
+// LRN is nil when the dip returned no record (still 200, still billed).
 type LrnLookupData struct {
-	ANI         string  `json:"ani"`
-	Destination string  `json:"destination"`
-	LRN         LrnData `json:"lrn"`
+	ANI         string   `json:"ani"`
+	Destination string   `json:"destination"`
+	LRN         *LrnData `json:"lrn"`
 }
 
 // CNAM performs a CNAM dip on `number` (10-digit TN).

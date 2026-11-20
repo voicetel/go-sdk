@@ -812,3 +812,15 @@ func TestV221Fax(t *testing.T) {
 		t.Fatalf("Fax.Document: %v %q", err, doc)
 	}
 }
+
+func TestLrnNullDip(t *testing.T) {
+	// A failed LRN dip is 200 with lrn:null — the field must decode to nil.
+	ctx := context.Background()
+	c, _ := mux(t, map[string]func(*http.Request) (int, string){
+		"GET /v2.2/lrn/2015550123/2015550100": ok(`{"ani":"2015550100","destination":"2015550123","lrn":null}`),
+	})
+	r, err := c.Lookups.LRN(ctx, "2015550123", "2015550100")
+	if err != nil || r.LRN != nil || r.ANI != "2015550100" {
+		t.Fatalf("LRN null dip: %v %+v", err, r)
+	}
+}
