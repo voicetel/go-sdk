@@ -10,6 +10,7 @@ Spec v2.2.21 sync — full audit against the live server code, plus the new Fax 
 ### Added
 - **Fax API** (`Client.Fax`): `ListNumbers`, `Send` (multipart, 201, queued; idempotent per Idempotency-Key — pass your own UUID to make retries safe across restarts), `History` (cursor paging, status filter), `Get` (job with timestamps, attempts, failureReason) and `Document` (the PDF as raw bytes).
 - Transport: multipart requests (`requestMultipart`), raw-bytes responses (`requestRaw`).
+- Typed error kinds for HTTP 402 (`KindPaymentRequired` — positive balance required: fax send, directory listing) and HTTP 413 (`KindRequestTooLarge` — upload over 8 MiB), both previously falling through to `KindUnknown`.
 
 ## 2.2.20 — 2026-11-20
 
