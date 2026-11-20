@@ -5,7 +5,7 @@ import (
 	"net/url"
 )
 
-// LookupsService provides CNAM and LRN dips.
+// LookupsService provides CNAM, carrier/line-type and LRN dips.
 //
 // Each call costs money; rate them per call rather than fanning out blindly.
 type LookupsService struct{ c *Client }
@@ -14,6 +14,23 @@ type LookupsService struct{ c *Client }
 type CnamData struct {
 	CNAM   string `json:"cnam,omitempty"`
 	Number string `json:"number"`
+}
+
+// CarrierInfo carries the carrier and line-type details for a number, with
+// the field names used by the underlying carrier lookup (hence snake_case on
+// the wire).
+type CarrierInfo struct {
+	Name              string  `json:"name,omitempty"`      // carrier or network name
+	Type              string  `json:"type,omitempty"`      // line type: voip, landline, mobile, ...
+	MobileCountryCode *string `json:"mobile_country_code"` // on mobile numbers; null otherwise
+	MobileNetworkCode *string `json:"mobile_network_code"` // on mobile numbers; null otherwise
+	ErrorCode         *int    `json:"error_code"`          // when the details could not be determined
+}
+
+// CarrierData is the response data for GET /v2.2/carrier/{number}.
+type CarrierData struct {
+	Number  string      `json:"number"`
+	Carrier CarrierInfo `json:"carrier"`
 }
 
 // LrnData is the LRN dip result.
@@ -45,6 +62,16 @@ type LrnLookupData struct {
 func (s *LookupsService) CNAM(ctx context.Context, number string) (*CnamData, error) {
 	var out CnamData
 	if err := s.c.t.request(ctx, "GET", "/v2.2/cnam/"+url.PathEscape(number), nil, nil, &out, true); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Carrier returns the carrier and line type for `number` (10-digit TN).
+// Billed per lookup at the account's CNAM rate, only when a result comes back.
+func (s *LookupsService) Carrier(ctx context.Context, number string) (*CarrierData, error) {
+	var out CarrierData
+	if err := s.c.t.request(ctx, "GET", "/v2.2/carrier/"+url.PathEscape(number), nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.20 — 2026-11-20
+
+Spec v2.2.20 sync. Adds the four new operations and tracks the truth fixes from spec v2.2.18–v2.2.20.
+
+### Added
+- Directory listing (411) on a number: `NumbersService.GetDirectoryListing`, `.SetDirectoryListing`, `.RemoveDirectoryListing` — GET returns the published state (`DirectoryListed`/`DirectoryNotListed`/`DirectoryPending`/`DirectoryRemoving`/`DirectoryUnavailable`, `Eligible`, `Listing`, `Pending`); PUT/DELETE are accepted at once (HTTP 202, applied in the background) with an `OrderID`.
+- Carrier & line-type lookup: `LookupsService.Carrier` — carrier details with the upstream field names (`mobile_country_code`, `mobile_network_code`, `error_code`); billed per lookup at the account's CNAM rate.
+- `OrderCreateData.Routes` — POST /v2.2/orders now returns the route each ordered number was placed on.
+
+### Changed
+- e911 `AddressID` is a **string** (hex), not an integer, on both the validation response and `E911ProvisionByIDRequest`.
+- `MessageSendRequest.Text` is optional (media-only MMS is valid); `Subject` is deprecated; `MediaURLs` must be non-empty.
+- Message-history `Value` records carry the full field set: `MessageText`, `TransactionGUID`, `ConcatenatedMessage` (dlr), `Attachments`, `Subject` (mms), `IP` (outbound sms).
+- DID `Route` fields accept any gateway id on the account in addition to the global routes; an unknown route is rejected by the API with 400.
+
 ## 2.2.17 — 2026-10-17
 
 Same code as 2.2.16. Re-issued after a repository history purge removed

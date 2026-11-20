@@ -12,13 +12,14 @@ type MessagingService struct{ c *Client }
 
 // MessageSendRequest is the body for POST /v2.2/messages.
 //
-// MediaURLs being non-nil switches the message type to MMS and unlocks Subject.
+// MediaURLs being non-nil switches the message type to MMS. Text is required for
+// SMS and optional for MMS (max 2048 chars there).
 type MessageSendRequest struct {
 	FromNumber string   `json:"fromNumber"`          // 10-digit TN on the authenticated account
 	ToNumber   string   `json:"toNumber"`            // 10-digit destination TN
-	Text       string   `json:"text"`                // UTF-8 message body
-	Subject    *string  `json:"subject,omitempty"`   // MMS only
-	MediaURLs  []string `json:"mediaUrls,omitempty"` // presence makes this an MMS
+	Text       *string  `json:"text,omitempty"`      // UTF-8 message body; required for SMS, optional for MMS
+	Subject    *string  `json:"subject,omitempty"`   // deprecated: accepted for compatibility, not delivered on most routes
+	MediaURLs  []string `json:"mediaUrls,omitempty"` // publicly reachable http(s) URLs; presence makes this an MMS (at least one)
 }
 
 // MessagingBrandCreateRequest is the body for POST /v2.2/messaging/brands.

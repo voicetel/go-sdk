@@ -30,7 +30,10 @@ type OrderNumber struct {
 // OrderNumberSpec is the {number, route} object variant.
 type OrderNumberSpec struct {
 	Number string `json:"number"`
-	Route  *int   `json:"route,omitempty"`
+	// Route is a gateway id on this account (see GatewaysService) or a global
+	// route (see RouteType in numbers.go). An unknown route fails the whole
+	// order with 400 before anything is ordered or charged.
+	Route *int `json:"route,omitempty"`
 }
 
 // MarshalJSON serializes OrderNumber as either a JSON string or object.
@@ -158,7 +161,14 @@ type OrderCreateData struct {
 	OrderID        string             `json:"orderId"`
 	AmountCharged  float64            `json:"amountCharged"` // amount deducted from the account balance
 	NumbersOrdered []string           `json:"numbersOrdered"`
+	Routes         []OrderRoute       `json:"routes,omitempty"` // the route each ordered number was placed on
 	Failed         []OrderFailedEntry `json:"failed,omitempty"`
+}
+
+// OrderRoute is one row of OrderCreateData.Routes.
+type OrderRoute struct {
+	Number string `json:"number"`
+	Route  int    `json:"route"` // gateway id or global route the number was placed on
 }
 
 // PortListData is the response data for GET /v2.2/ports.

@@ -160,7 +160,7 @@ func TestE911FullSurface(t *testing.T) {
 	c, _ := mux(t, map[string]func(*http.Request) (int, string){
 		"GET /v2.2/e911":               ok(`{"records":[` + record + `]}`),
 		"POST /v2.2/e911":              created(`{"record":` + record + `}`),
-		"POST /v2.2/e911/validations":  ok(`{"address":{"addressid":1,"address1":"1 Main","city":"Closter","state":"NJ","zip":"07624"}}`),
+		"POST /v2.2/e911/validations":  ok(`{"address":{"addressid":"123a45b678c9d012e3f45a67b890c123","address1":"1 Main","city":"Closter","state":"NJ","zip":"07624"}}`),
 		"GET /v2.2/e911/2015550123":    ok(`{"record":` + record + `}`),
 		"PUT /v2.2/e911/2015550123":    ok(`{"record":` + record + `}`),
 		"DELETE /v2.2/e911/2015550123": noContent,
@@ -172,13 +172,13 @@ func TestE911FullSurface(t *testing.T) {
 	if r, err := c.E911.Create(ctx, E911CreateRequest{DN: "2015550123", Callername: "ACME", Address1: "1 Main", City: "Closter", State: "NJ", Zip: "07624"}); err != nil || r.Record.Callername != "ACME" {
 		t.Fatalf("Create: %v", err)
 	}
-	if r, err := c.E911.Validate(ctx, E911AddressRequest{Address1: "1 Main", City: "Closter", State: "NJ", Zip: "07624"}); err != nil || r.Address.AddressID != 1 {
+	if r, err := c.E911.Validate(ctx, E911AddressRequest{Address1: "1 Main", City: "Closter", State: "NJ", Zip: "07624"}); err != nil || r.Address.AddressID != "123a45b678c9d012e3f45a67b890c123" {
 		t.Fatalf("Validate: %v", err)
 	}
 	if r, err := c.E911.Get(ctx, "2015550123"); err != nil || r.Record.DN != "12015550123" {
 		t.Fatalf("Get: %v", err)
 	}
-	if r, err := c.E911.Provision(ctx, "2015550123", E911ProvisionByIDRequest{Callername: "ACME", AddressID: 1}); err != nil || r.Record.DN != "12015550123" {
+	if r, err := c.E911.Provision(ctx, "2015550123", E911ProvisionByIDRequest{Callername: "ACME", AddressID: "123a45b678c9d012e3f45a67b890c123"}); err != nil || r.Record.DN != "12015550123" {
 		t.Fatalf("Provision: %v", err)
 	}
 	if err := c.E911.Remove(ctx, "2015550123"); err != nil {
@@ -283,7 +283,7 @@ func TestMessagingFullSurface(t *testing.T) {
 	if v := rh.Messages[0].Value; v.Number != "2015550123" || v.Direction != "out" {
 		t.Errorf("history record value not decoded: %+v", v)
 	}
-	if r, err := c.Messaging.Send(ctx, MessageSendRequest{FromNumber: "2015550100", ToNumber: "2015550123", Text: "hi"}); err != nil || r.ID != "x" {
+	if r, err := c.Messaging.Send(ctx, MessageSendRequest{FromNumber: "2015550100", ToNumber: "2015550123", Text: strPtr("hi")}); err != nil || r.ID != "x" {
 		t.Fatalf("Send: %v", err)
 	}
 	if r, err := c.Messaging.CreateBrand(ctx, MessagingBrandCreateRequest{MessagingBrandID: "BABC", MessagingBrandName: "X"}); err != nil || r.Result.Status != "Success" {
@@ -650,3 +650,100 @@ func TestAPIErrorRepr(t *testing.T) {
 
 // errEOF is a sentinel for the cause-only error test.
 var errEOF = &APIError{Message: "eof"}
+
+// strPtr is a test helper for optional string fields.
+func strPtr(s string) *string { return &s }
+
+// ------------------------------------------------------- v2.2.20 additions ---
+
+func TestV220DirectoryListing(t *testing.T) {
+	ctx := context.Background()
+	c, _ := mux(t, map[string]func(*http.Request) (int, string){
+		"GET /v2.2/numbers/2015550123/directory-listing": ok(`{` +
+			`"number":"2015550123","status":"listed","eligible":true,` +
+			`"listing":{"type":"B","name":"Acme Corp","streetNumber":"100","streetName":"Broadway","streetType":"St","streetSuffix":"","location":"Suite 900","city":"New York","state":"NY","zip":"10005","complex":false},` +
+			`"pending":null}`),
+		"PUT /v2.2/numbers/2015550123/directory-listing": func(r *http.Request) (int, string) {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["type"] != "business" || body["city"] != "New York" || body["state"] != "NY" || body["zip"] != "10005" {
+				t.Errorf("directory-listing body wrong: %v", body)
+			}
+			if _, ok := body["firstName"]; ok {
+				t.Errorf("unset fields must be omitted: %v", body)
+			}
+			// v2.2.20: writes are accepted (202), applied in the background.
+			return 202, `{"status":"success","data":{"number":"2015550123","status":"pending","orderId":"1026472",` +
+				`"listing":{"type":"B","name":"Acme Corp","streetNumber":"100","streetName":"Broadway","streetType":"St","streetSuffix":"","location":"Suite 900","city":"New York","state":"NY","zip":"10005"}}}`
+		},
+		"DELETE /v2.2/numbers/2015550123/directory-listing": func(*http.Request) (int, string) {
+			return 202, `{"status":"success","data":{"number":"2015550123","status":"removing","orderId":"1026473"}}`
+		},
+	})
+	got, err := c.Numbers.GetDirectoryListing(ctx, "2015550123")
+	if err != nil || got.Status != DirectoryListed || got.Listing == nil || got.Listing.Name != "Acme Corp" {
+		t.Fatalf("GetDirectoryListing: %v %+v", err, got)
+	}
+	if got.Eligible == nil || !*got.Eligible {
+		t.Fatalf("eligible wrong: %+v", got.Eligible)
+	}
+	accepted, err := c.Numbers.SetDirectoryListing(ctx, "2015550123", DirectoryListingRequest{
+		Type: "business", Name: strPtr("Acme Corp"),
+		StreetNumber: strPtr("100"), StreetName: strPtr("Broadway"), StreetType: strPtr("St"),
+		Location: strPtr("Suite 900"), City: "New York", State: "NY", Zip: "10005",
+	})
+	if err != nil || accepted.Status != DirectoryPending || accepted.OrderID == nil || *accepted.OrderID != "1026472" {
+		t.Fatalf("SetDirectoryListing: %v %+v", err, accepted)
+	}
+	removed, err := c.Numbers.RemoveDirectoryListing(ctx, "2015550123")
+	if err != nil || removed.Status != DirectoryRemoving || *removed.OrderID != "1026473" {
+		t.Fatalf("RemoveDirectoryListing: %v %+v", err, removed)
+	}
+}
+
+func TestV220CarrierLookup(t *testing.T) {
+	ctx := context.Background()
+	c, _ := mux(t, map[string]func(*http.Request) (int, string){
+		"GET /v2.2/carrier/2015550123": ok(`{"number":"2015550123","carrier":{` +
+			`"name":"EXAMPLE CARRIER","type":"voip","mobile_country_code":null,"mobile_network_code":null,"error_code":null}}`),
+	})
+	r, err := c.Lookups.Carrier(ctx, "2015550123")
+	if err != nil || r.Carrier.Name != "EXAMPLE CARRIER" || r.Carrier.Type != "voip" {
+		t.Fatalf("Carrier: %v %+v", err, r)
+	}
+	// wire field names are the upstream carrier's snake_case
+	var raw map[string]any
+	b, _ := json.Marshal(r.Carrier)
+	_ = json.Unmarshal(b, &raw)
+	for _, k := range []string{"mobile_country_code", "mobile_network_code", "error_code"} {
+		if _, ok := raw[k]; !ok {
+			t.Errorf("carrier JSON missing %s", k)
+		}
+	}
+}
+
+func TestV220OrdersRoutesAndMMSSend(t *testing.T) {
+	ctx := context.Background()
+	c, _ := mux(t, map[string]func(*http.Request) (int, string){
+		"POST /v2.2/orders": created(`{"orderId":"ORD-1","amountCharged":1,"numbersOrdered":["2015550100"],` +
+			`"failed":[],"routes":[{"number":"2015550100","route":4}]}`),
+		"POST /v2.2/messages": func(r *http.Request) (int, string) {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if _, ok := body["text"]; ok {
+				t.Errorf("media-only MMS must omit text: %v", body)
+			}
+			return 202, `{"status":"success","data":{"id":"m-1","type":"mms","fromNumber":"2015550123","toNumber":"2015550100","parts":1}}`
+		},
+	})
+	if r, err := c.INumbering.Order(ctx, OrderCreateRequest{Numbers: []OrderNumber{{Spec: &OrderNumberSpec{Number: "2015550100"}}}}); err != nil ||
+		len(r.Routes) != 1 || r.Routes[0].Number != "2015550100" || r.Routes[0].Route != 4 {
+		t.Fatalf("Order routes: %v %+v", err, r)
+	}
+	if r, err := c.Messaging.Send(ctx, MessageSendRequest{
+		FromNumber: "2015550123", ToNumber: "2015550100",
+		MediaURLs: []string{"https://example.com/photo.jpg"},
+	}); err != nil || r.ID != "m-1" {
+		t.Fatalf("media-only MMS send: %v %+v", err, r)
+	}
+}

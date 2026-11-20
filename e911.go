@@ -34,7 +34,7 @@ type E911CreateRequest struct {
 // E911ProvisionByIDRequest is the body for PUT /v2.2/e911/{dn}.
 type E911ProvisionByIDRequest struct {
 	Callername string `json:"callername"`
-	AddressID  int    `json:"addressid"` // from POST /v2.2/e911/validations
+	AddressID  string `json:"addressid"` // hex string from POST /v2.2/e911/validations
 }
 
 // E911Entry is an e911 record bound to a TN.
@@ -50,7 +50,7 @@ type E911Entry struct {
 
 // E911ValidatedAddress is the result from POST /v2.2/e911/validations.
 type E911ValidatedAddress struct {
-	AddressID int    `json:"addressid"`
+	AddressID string `json:"addressid"` // hex string
 	Address1  string `json:"address1"`
 	Address2  string `json:"address2,omitempty"`
 	City      string `json:"city"`

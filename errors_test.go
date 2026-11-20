@@ -76,7 +76,7 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	assertErr(t, "E911.Validate", err)
 	_, err = c.E911.Get(ctx, "2015550123")
 	assertErr(t, "E911.Get", err)
-	_, err = c.E911.Provision(ctx, "2015550123", E911ProvisionByIDRequest{Callername: "x", AddressID: 1})
+	_, err = c.E911.Provision(ctx, "2015550123", E911ProvisionByIDRequest{Callername: "x", AddressID: "123a45b678c9d012e3f45a67b890c123"})
 	assertErr(t, "E911.Provision", err)
 	if err := c.E911.Remove(ctx, "2015550123"); err == nil {
 		t.Error("E911.Remove expected error")
@@ -106,7 +106,7 @@ func TestEveryMethodPropagatesAPIError(t *testing.T) {
 	// Messaging
 	_, err = c.Messaging.History(ctx, HistoryOptions{Number: "2015550100"})
 	assertErr(t, "Messaging.History", err)
-	_, err = c.Messaging.Send(ctx, MessageSendRequest{FromNumber: "2015550100", ToNumber: "2015550123", Text: "hi"})
+	_, err = c.Messaging.Send(ctx, MessageSendRequest{FromNumber: "2015550100", ToNumber: "2015550123", Text: strPtr("hi")})
 	assertErr(t, "Messaging.Send", err)
 	_, err = c.Messaging.CreateBrand(ctx, MessagingBrandCreateRequest{MessagingBrandID: "BABC", MessagingBrandName: "X"})
 	assertErr(t, "Messaging.CreateBrand", err)

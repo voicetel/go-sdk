@@ -12,10 +12,10 @@ type NumbersService struct{ c *Client }
 
 // -------------------------------------------------------------- route type ---
 
-// RouteType is a DID-level global route type — the domain of every DID-level
-// route field on the numbers resource (NumberAddRequest.Route,
-// NumberDetail.Route, NumberRouteRequest.Route, ...). It is distinct from
-// gateway ids, which identify specific gateways (see GatewaysService).
+// RouteType is a DID-level global route type. DID-level route fields on the
+// numbers resource (NumberAddRequest.Route, NumberDetail.Route,
+// NumberRouteRequest.Route, ...) accept one of these global routes OR a gateway
+// id on the account (see GatewaysService).
 type RouteType int
 
 // Global route types for DID-level route fields. 7 is not assigned.
@@ -35,13 +35,15 @@ const (
 // NumberAddRequest is the body for POST /v2.2/numbers.
 type NumberAddRequest struct {
 	Number string `json:"number"`
-	Route  *int   `json:"route,omitempty"` // global route type (see RouteType); defaults to 4 (DID)
+	Route  *int   `json:"route,omitempty"` // gateway id on this account or a global route (see RouteType); defaults to 4 (DID)
 }
 
 // NumberRouteRequest is the body for PUT /v2.2/numbers/{number}/route.
 type NumberRouteRequest struct {
-	// Route is the global route type to apply: 1 USER, 2 T30, 3 VOICE_BRIDGE,
-	// 4 DID (default), 5 T38, 6 VOICEML, 8 SDN, or 9 MOBILE (7 is not assigned).
+	// Route is a gateway id on this account (see GatewaysService) or a global
+	// route to apply: 1 USER, 2 T30, 3 VOICE_BRIDGE, 4 DID (default), 5 T38,
+	// 6 VOICEML, 8 SDN, or 9 MOBILE (7 is not assigned). An unknown route is
+	// rejected with 400.
 	Route int `json:"route"`
 }
 
@@ -183,6 +185,80 @@ type NumberLidbData struct {
 	CNAM                   string `json:"cnam"`                   // sanitised caller name (max 15)
 	CustomerOrderReference string `json:"customerOrderReference"` // echoed or auto-generated
 	CarrierStatus          string `json:"carrierStatus"`          // "Success" or failure detail
+}
+
+// DirectoryListingType is a listing type: B (business) or R (residence).
+type DirectoryListingType string
+
+// Directory listing types.
+const (
+	DirectoryListingBusiness    DirectoryListingType = "B"
+	DirectoryListingResidential DirectoryListingType = "R"
+)
+
+// DirectoryListingStatus is the lifecycle state of a number's listing.
+type DirectoryListingStatus string
+
+// Directory listing states.
+const (
+	DirectoryListed      DirectoryListingStatus = "listed"      // published
+	DirectoryNotListed   DirectoryListingStatus = "not_listed"  // no listing
+	DirectoryPending     DirectoryListingStatus = "pending"     // an add or change is being applied
+	DirectoryRemoving    DirectoryListingStatus = "removing"    // a removal is being applied
+	DirectoryUnavailable DirectoryListingStatus = "unavailable" // the number cannot be listed
+)
+
+// DirectoryListing is a 411 directory listing, as published (GET) or submitted
+// (PUT). Business listings carry the name in Name; residential ones carry
+// FirstName and LastName. Complex marks a multi-line listing, which is
+// read-only through the API.
+type DirectoryListing struct {
+	Type         DirectoryListingType `json:"type"`                // B (business) or R (residence)
+	Name         string               `json:"name,omitempty"`      // business name (type B)
+	FirstName    string               `json:"firstName,omitempty"` // resident's first name (type R)
+	LastName     string               `json:"lastName,omitempty"`  // resident's last name (type R)
+	StreetNumber string               `json:"streetNumber,omitempty"`
+	StreetName   string               `json:"streetName,omitempty"`
+	StreetType   string               `json:"streetType,omitempty"`   // e.g. St, Ave
+	StreetSuffix string               `json:"streetSuffix,omitempty"` // N, S, E, W, NE, NW, SE or SW
+	Location     string               `json:"location,omitempty"`     // suite or unit
+	City         string               `json:"city,omitempty"`
+	State        string               `json:"state,omitempty"` // two-letter US state or territory code
+	Zip          string               `json:"zip,omitempty"`   // 5-digit ZIP
+	Complex      bool                 `json:"complex,omitempty"`
+}
+
+// DirectoryListingRequest is the body for PUT /v2.2/numbers/{number}/directory-listing.
+// Type is "business" or "residence" (the server also accepts the shorthand
+// "B"/"R"). A business sets Name; a residence sets FirstName and LastName. The
+// street is optional — StreetNumber and StreetName must be given together or
+// neither. City, State and Zip are required.
+type DirectoryListingRequest struct {
+	Type         string  `json:"type"`                   // "business" or "residence"
+	Name         *string `json:"name,omitempty"`         // required for business; max 60
+	FirstName    *string `json:"firstName,omitempty"`    // required for residence; max 30
+	LastName     *string `json:"lastName,omitempty"`     // required for residence; max 30
+	StreetNumber *string `json:"streetNumber,omitempty"` // max 10; pairs with StreetName
+	StreetName   *string `json:"streetName,omitempty"`   // max 40; pairs with StreetNumber
+	StreetType   *string `json:"streetType,omitempty"`   // e.g. St, Ave; max 10
+	StreetSuffix *string `json:"streetSuffix,omitempty"` // "", N, S, E, W, NE, NW, SE or SW
+	Location     *string `json:"location,omitempty"`     // suite or unit; max 30
+	City         string  `json:"city"`                   // required; max 40
+	State        string  `json:"state"`                  // required; two-letter US state or territory code
+	Zip          string  `json:"zip"`                    // required; 5 digits (ZIP+4 accepted)
+}
+
+// DirectoryListingData is the response data for the directory-listing
+// operations. PUT and DELETE are accepted at once (HTTP 202) and applied in
+// the background: Status is pending or removing (not_listed when a pending add
+// was cancelled) and OrderID carries the carrier order reference.
+type DirectoryListingData struct {
+	Number   string                 `json:"number"`
+	Status   DirectoryListingStatus `json:"status"`
+	Eligible *bool                  `json:"eligible,omitempty"` // whether a listing can be added (GET)
+	Listing  *DirectoryListing      `json:"listing,omitempty"`  // the published listing, or null
+	Pending  *DirectoryListing      `json:"pending,omitempty"`  // a submitted listing not yet published, or null
+	OrderID  *string                `json:"orderId,omitempty"`  // carrier order reference (PUT/DELETE)
 }
 
 // NumberMessagingPatchData is the response data for
@@ -367,6 +443,36 @@ func (s *NumbersService) SetCNAM(ctx context.Context, number string, body Number
 func (s *NumbersService) SetLidb(ctx context.Context, number string, body NumberLidbRequest) (*NumberLidbData, error) {
 	var out NumberLidbData
 	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/lidb", nil, body, &out, true); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetDirectoryListing reads the TN's 411 directory-listing state as published.
+func (s *NumbersService) GetDirectoryListing(ctx context.Context, number string) (*DirectoryListingData, error) {
+	var out DirectoryListingData
+	if err := s.c.t.request(ctx, "GET", "/v2.2/numbers/"+url.PathEscape(number)+"/directory-listing", nil, nil, &out, true); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SetDirectoryListing adds or replaces the TN's directory listing. The change
+// is accepted at once (202, Status pending) and applied in the background.
+func (s *NumbersService) SetDirectoryListing(ctx context.Context, number string, body DirectoryListingRequest) (*DirectoryListingData, error) {
+	var out DirectoryListingData
+	if err := s.c.t.request(ctx, "PUT", "/v2.2/numbers/"+url.PathEscape(number)+"/directory-listing", nil, body, &out, true); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RemoveDirectoryListing removes the TN's directory listing, or cancels an add
+// that has not been applied yet. Accepted at once (202) and applied in the
+// background; billing stops immediately.
+func (s *NumbersService) RemoveDirectoryListing(ctx context.Context, number string) (*DirectoryListingData, error) {
+	var out DirectoryListingData
+	if err := s.c.t.request(ctx, "DELETE", "/v2.2/numbers/"+url.PathEscape(number)+"/directory-listing", nil, nil, &out, true); err != nil {
 		return nil, err
 	}
 	return &out, nil

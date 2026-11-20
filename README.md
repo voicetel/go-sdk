@@ -2,7 +2,7 @@
 
 The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api/v2.2/) — provision numbers, place orders, validate e911, send messages, and manage your account, all with strongly-typed, context-aware Go.
 
-![Version](https://img.shields.io/badge/version-2.2.17-blue)
+![Version](https://img.shields.io/badge/version-2.2.20-blue)
 ![Go](https://img.shields.io/badge/go-1.22%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
@@ -26,7 +26,7 @@ The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api
 ## ✨ Features
 
 ### 🛡️ Strongly Typed End-to-End
-- **Native Go structs** for every one of the 79 API operations — JSON encoded with `encoding/json`, no reflection magic.
+- **Native Go structs** for every one of the 83 API operations — JSON encoded with `encoding/json`, no reflection magic.
 - **Pointer types for optional request fields** — distinguish "not set" from "zero" cleanly when PATCH-ing.
 - **Pointer types for nullable response fields** — `ForwardTo *string` lets you tell apart "no forward configured" from an empty destination.
 - **Context-aware throughout.** Every method takes `context.Context` as the first argument; cancel and timeouts propagate down to the HTTP layer.
@@ -67,7 +67,7 @@ The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api
 go get github.com/voicetel/go-sdk/v2
 ```
 
-Requires Go 1.22 or later. The module path carries the `/v2` major-version suffix, so release tags resolve with `go get github.com/voicetel/go-sdk/v2@v2.2.17`.
+Requires Go 1.22 or later. The module path carries the `/v2` major-version suffix, so release tags resolve with `go get github.com/voicetel/go-sdk/v2@v2.2.20`.
 
 ## 🏁 Quickstart
 
