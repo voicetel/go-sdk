@@ -16,12 +16,18 @@ const (
 	KindBadRequest
 	// KindAuthentication — HTTP 401, bearer token missing, expired, or invalid.
 	KindAuthentication
+	// KindPaymentRequired — HTTP 402, the account balance must be positive
+	// for this action (POST /v2.2/faxes, PUT .../directory-listing).
+	KindPaymentRequired
 	// KindPermissionDenied — HTTP 403, authenticated but not allowed.
 	KindPermissionDenied
 	// KindNotFound — HTTP 404, resource does not exist.
 	KindNotFound
 	// KindConflict — HTTP 409, request conflicts with current state.
 	KindConflict
+	// KindRequestTooLarge — HTTP 413, the upload is too large (fax documents
+	// must total 8 MiB or smaller).
+	KindRequestTooLarge
 	// KindRateLimit — HTTP 429, exceeded a rate cap (6/hour/IP on account,
 	// account/cdr, account/recurring-charges, and account/api-key; 30/hour/account
 	// on messaging health checks).
@@ -146,12 +152,16 @@ func kindFromStatus(status int) ErrorKind {
 		return KindBadRequest
 	case status == 401:
 		return KindAuthentication
+	case status == 402:
+		return KindPaymentRequired
 	case status == 403:
 		return KindPermissionDenied
 	case status == 404:
 		return KindNotFound
 	case status == 409:
 		return KindConflict
+	case status == 413:
+		return KindRequestTooLarge
 	case status == 429:
 		return KindRateLimit
 	case status >= 500 && status < 600:

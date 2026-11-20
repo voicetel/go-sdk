@@ -233,3 +233,13 @@ func TestLoginPropagatesEndpointError(t *testing.T) {
 		t.Fatalf("expected KindRateLimit, got %v", err)
 	}
 }
+
+func TestErrorKinds402And413(t *testing.T) {
+	// v2.2.21: fax-era statuses map to typed kinds.
+	if kindFromStatus(402) != KindPaymentRequired {
+		t.Errorf("402 -> %v, want KindPaymentRequired", kindFromStatus(402))
+	}
+	if kindFromStatus(413) != KindRequestTooLarge {
+		t.Errorf("413 -> %v, want KindRequestTooLarge", kindFromStatus(413))
+	}
+}
