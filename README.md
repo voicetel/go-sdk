@@ -39,12 +39,12 @@ The official Go client for the [VoiceTel REST API](https://voicetel.com/docs/api
 - **Structured `*APIError`** with typed `Kind` so you can `switch err.Kind { case voicetel.KindRateLimit: ... }` without parsing HTTP status codes.
 
 ### 📞 Complete API Coverage
-- **Numbers** — list, get, add, remove, route, translate, CNAM, LIDB, fax, forward, SMS, messaging campaigns, port-out PIN, account moves.
+- **Numbers** — list, get, add, remove, route, translate, CNAM, LIDB, fax, forward, SMS, messaging campaigns, port-out PIN, account moves, 411 directory listing.
 - **Account** — profile, sub-accounts, CDRs, credits, payments, MRC, registration, password recovery.
 - **e911** — record provisioning, address validation, lookup, removal.
 - **Gateways** — list, create, update, delete, view bound numbers.
 - **Messaging** — SMS & MMS sending, message history, 10DLC brand and campaign registration, per-number messaging state, and messaging health (account overview, per-number live check, spam-blocked samples, alert-email setting).
-- **Lookups** — CNAM and LRN dips.
+- **Lookups** — CNAM, carrier & line type, and LRN dips.
 - **iNumbering** — inventory search, coverage queries, number orders, port-in submissions, port-out availability.
 - **Support** — ticket create / read / update / delete, threaded messages, replies.
 - **ACL** — IP allowlist management with structured 409 conflict bodies.
@@ -144,7 +144,7 @@ key, err := c.Login(ctx, "1000000001", "hunter2")
 | e911 | `c.E911` | `c.E911.Validate(ctx, voicetel.E911AddressRequest{...})` |
 | Gateways | `c.Gateways` | `c.Gateways.List(ctx)` |
 | iNumbering | `c.INumbering` | `c.INumbering.SearchInventory(ctx, voicetel.InventoryQuery{TnMask: "201555*"})` |
-| Lookups | `c.Lookups` | `c.Lookups.LRN(ctx, "2015550123", "2015550100")` |
+| Lookups | `c.Lookups` | `c.Lookups.Carrier(ctx, "2015550123")` |
 | Messaging | `c.Messaging` | `c.Messaging.Send(ctx, voicetel.MessageSendRequest{...})` |
 | Numbers | `c.Numbers` | `c.Numbers.AssignCampaign(ctx, "2015550123", ...)` |
 | Support | `c.Support` | `c.Support.Create(ctx, voicetel.TicketCreateRequest{...})` |
